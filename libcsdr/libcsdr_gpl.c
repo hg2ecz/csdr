@@ -20,61 +20,50 @@ This file is part of libcsdr.
 
 */
 
+#include <math.h>
 #include "libcsdr_gpl.h"
 
 #ifdef LIBCSDR_GPL
 
-float shift_addition_cc(complexf *input, complexf* output, int input_size, shift_addition_data_t d, float starting_phase)
+float shift_addition_cc(const float complex *input, float complex *output, int input_size, shift_addition_data_t d, float starting_phase)
 {
 	//The original idea was taken from wdsp:
 	//http://svn.tapr.org/repos_sdr_hpsdr/trunk/W5WC/PowerSDR_HPSDR_mRX_PS/Source/wdsp/shift.c
 
 	//However, this method introduces noise (from floating point rounding errors), which increases until the end of the buffer.
 	//fprintf(stderr, "cosd=%g sind=%g\n", d.cosdelta, d.sindelta);
-	float cosphi=cos(starting_phase);
-	float sinphi=sin(starting_phase);
-	float cosphi_last, sinphi_last;
+	float complex sincosphi=cos(starting_phase) + I*sin(starting_phase);
 	for(int i=0;i<input_size;i++) //@shift_addition_cc: work
 	{
-		iof(output,i)=cosphi*iof(input,i)-sinphi*qof(input,i);
-		qof(output,i)=sinphi*iof(input,i)+cosphi*qof(input,i);
+		output[i]=sincosphi*input[i];
 		//using the trigonometric addition formulas
 		//cos(phi+delta)=cos(phi)cos(delta)-sin(phi)*sin(delta)
-		cosphi_last=cosphi;
-		sinphi_last=sinphi;
-		cosphi=cosphi_last*d.cosdelta-sinphi_last*d.sindelta;
-		sinphi=sinphi_last*d.cosdelta+cosphi_last*d.sindelta;
+		sincosphi*=d.sincosdelta;
 	}
-	starting_phase+=d.rate*PI*input_size;
-	while(starting_phase>PI) starting_phase-=2*PI; //@shift_addition_cc: normalize starting_phase
-	while(starting_phase<-PI) starting_phase+=2*PI;
+	starting_phase+=d.rate*M_PI*input_size;
+	while(starting_phase>M_PI) starting_phase-=2*M_PI; //@shift_addition_cc: normalize starting_phase
+	while(starting_phase<-M_PI) starting_phase+=2*M_PI;
 	return starting_phase;
 }
 
-float shift_addition_fc(float *input, complexf* output, int input_size, shift_addition_data_t d, float starting_phase)
+float shift_addition_fc(const float *input, float complex *output, int input_size, shift_addition_data_t d, float starting_phase)
 {
 	//The original idea was taken from wdsp:
 	//http://svn.tapr.org/repos_sdr_hpsdr/trunk/W5WC/PowerSDR_HPSDR_mRX_PS/Source/wdsp/shift.c
 
 	//However, this method introduces noise (from floating point rounding errors), which increases until the end of the buffer.
 	//fprintf(stderr, "cosd=%g sind=%g\n", d.cosdelta, d.sindelta);
-	float cosphi=cos(starting_phase);
-	float sinphi=sin(starting_phase);
-	float cosphi_last, sinphi_last;
+	float complex sincosphi=cos(starting_phase) + I*sin(starting_phase);
 	for(int i=0;i<input_size;i++) //@shift_addition_cc: work
 	{
-		iof(output,i)=cosphi*input[i];
-		qof(output,i)=sinphi*input[i];
+		output[i]=sincosphi*input[i];
 		//using the trigonometric addition formulas
 		//cos(phi+delta)=cos(phi)cos(delta)-sin(phi)*sin(delta)
-		cosphi_last=cosphi;
-		sinphi_last=sinphi;
-		cosphi=cosphi_last*d.cosdelta-sinphi_last*d.sindelta;
-		sinphi=sinphi_last*d.cosdelta+cosphi_last*d.sindelta;
+		sincosphi*=d.sincosdelta;
 	}
-	starting_phase+=d.rate*PI*input_size;
-	while(starting_phase>PI) starting_phase-=2*PI; //@shift_addition_cc: normalize starting_phase
-	while(starting_phase<-PI) starting_phase+=2*PI;
+	starting_phase+=d.rate*M_PI*input_size;
+	while(starting_phase>M_PI) starting_phase-=2*M_PI; //@shift_addition_cc: normalize starting_phase
+	while(starting_phase<-M_PI) starting_phase+=2*M_PI;
 	return starting_phase;
 }
 
@@ -82,8 +71,7 @@ shift_addition_data_t shift_addition_init(float rate)
 {
 	rate*=2;
 	shift_addition_data_t out;
-	out.sindelta=sin(rate*PI);
-	out.cosdelta=cos(rate*PI);
+	out.sincosdelta=cos(rate*M_PI) + I*sin(rate*M_PI);
 	out.rate=rate;
 	return out;
 }
@@ -94,21 +82,16 @@ shift_addition_data_t shift_addition_init(float rate)
 void shift_addition_cc_test(shift_addition_data_t d)
 {
 	float phi=0;
-	float cosphi=cos(phi);
-	float sinphi=sin(phi);
-	float cosphi_last, sinphi_last;
+	float sincosphi=cos(phi) + I*sin(phi);
 	int avg_size=(int)(2.0/d.rate+1.0); //average one period of sine
 	int avg_counter=0;
 	float avg=0;
 	printf("error_vector=[");
 	for(unsigned i=0;i<SACCTEST_STEP*SACCTEST_LOOPS;i++) //@shift_addition_cc: work
 	{
-		cosphi_last=cosphi;
-		sinphi_last=sinphi;
-		cosphi=cosphi_last*d.cosdelta-sinphi_last*d.sindelta;
-		sinphi=sinphi_last*d.cosdelta+cosphi_last*d.sindelta;
-		phi+=d.rate*PI;
-		while(phi>2*PI) phi-=2*PI; //@shift_addition_cc: normalize phase
+		sincosphi*=d.sincosdelta;
+		phi+=d.rate*M_PI;
+		while(phi>2*M_PI) phi-=2*M_PI; //@shift_addition_cc: normalize phase
 		if(i%SACCTEST_STEP==0)
 		{
 			avg_counter=avg_size;
@@ -116,7 +99,7 @@ void shift_addition_cc_test(shift_addition_data_t d)
 		}
 		if(avg_counter)
 		{
-			avg+=fabs(cosphi-cos(phi));
+			avg+=fabs(creal(sincosphi)-cos(phi));
 			if(!--avg_counter) printf("%g ", avg/avg_size);
 		}
 	}
@@ -128,34 +111,28 @@ shift_addition_data_t decimating_shift_addition_init(float rate, int decimation)
 	return shift_addition_init(rate*decimation);
 }
 
-decimating_shift_addition_status_t decimating_shift_addition_cc(complexf *input, complexf* output, int input_size, shift_addition_data_t d, int decimation, decimating_shift_addition_status_t s)
+decimating_shift_addition_status_t decimating_shift_addition_cc(const float complex *input, float complex *output, int input_size, shift_addition_data_t d, int decimation, decimating_shift_addition_status_t s)
 {
 	//The original idea was taken from wdsp:
 	//http://svn.tapr.org/repos_sdr_hpsdr/trunk/W5WC/PowerSDR_HPSDR_mRX_PS/Source/wdsp/shift.c
 	//However, this method introduces noise (from floating point rounding errors), which increases until the end of the buffer.
 	//fprintf(stderr, "cosd=%g sind=%g\n", d.cosdelta, d.sindelta);
-	float cosphi=cos(s.starting_phase);
-	float sinphi=sin(s.starting_phase);
-	float cosphi_last, sinphi_last;
+	float complex sincosphi=cos(s.starting_phase) + I*sin(s.starting_phase);
 	int i;
 	int k=0;
 	for(i=s.decimation_remain;i<input_size;i+=decimation) //@shift_addition_cc: work
 	{
-		iof(output,k)=cosphi*iof(input,i)-sinphi*qof(input,i);
-		qof(output,k)=sinphi*iof(input,i)+cosphi*qof(input,i);
+		output[k]=sincosphi*input[i];
 		k++;
 		//using the trigonometric addition formulas
 		//cos(phi+delta)=cos(phi)cos(delta)-sin(phi)*sin(delta)
-		cosphi_last=cosphi;
-		sinphi_last=sinphi;
-		cosphi=cosphi_last*d.cosdelta-sinphi_last*d.sindelta;
-		sinphi=sinphi_last*d.cosdelta+cosphi_last*d.sindelta;
+		sincosphi*=d.sincosdelta;
 	}
 	s.decimation_remain=i-input_size;
-	s.starting_phase+=d.rate*PI*k;
+	s.starting_phase+=d.rate*M_PI*k;
 	s.output_size=k;
-	while(s.starting_phase>PI) s.starting_phase-=2*PI; //@shift_addition_cc: normalize starting_phase
-	while(s.starting_phase<-PI) s.starting_phase+=2*PI;
+	while(s.starting_phase>M_PI) s.starting_phase-=2*M_PI; //@shift_addition_cc: normalize starting_phase
+	while(s.starting_phase<-M_PI) s.starting_phase+=2*M_PI;
 	return s;
 }
 
@@ -172,7 +149,7 @@ float agc_ff(float* input, float* output, int input_size, float reference, float
 
 			max_gain = pow(2, adc_bits)
 				max_gain should be no more than the dynamic range of your A/D converter.
-			gain_filter_alpha = 1 / ((fs/(2*PI*fc))+1)
+			gain_filter_alpha = 1 / ((fs/(2*M_PI*fc))+1)
 
 			>>> 1 / ((48000./(2*3.141592654*100))+1)
 			0.012920836043344543

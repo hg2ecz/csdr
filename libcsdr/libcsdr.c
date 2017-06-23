@@ -54,7 +54,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define MFIRDES_GWS(NAME) \
     if(!strcmp( #NAME , input )) return WINDOW_ ## NAME;
 
-window_t firdes_get_window_from_string(char* input)
+window_t firdes_get_window_from_string(const char *input)
 {
     MFIRDES_GWS(BOXCAR);
     MFIRDES_GWS(BLACKMAN);
@@ -78,7 +78,7 @@ float firdes_wkernel_blackman(float rate)
     //Explanation at Chapter 16 of dspguide.com, page 2
     //Blackman window has better stopband attentuation and passband ripple than Hamming, but it has slower rolloff.
     rate=0.5+rate/2;
-    return 0.42-0.5*cos(2*PI*rate)+0.08*cos(4*PI*rate);
+    return 0.42-0.5*cos(2*M_PI*rate)+0.08*cos(4*M_PI*rate);
 }
 
 float firdes_wkernel_hamming(float rate)
@@ -86,7 +86,7 @@ float firdes_wkernel_hamming(float rate)
     //Explanation at Chapter 16 of dspguide.com, page 2
     //Hamming window has worse stopband attentuation and passband ripple than Blackman, but it has faster rolloff.
     rate=0.5+rate/2;
-    return 0.54-0.46*cos(2*PI*rate);
+    return 0.54-0.46*cos(2*M_PI*rate);
 }
 
 
@@ -114,7 +114,7 @@ float (*firdes_get_window_kernel(window_t window))(float)
                                                                    |___/
 */
 
-void normalize_fir_f(float* input, float* output, int length)
+void normalize_fir_f(const float *input, float *output, int length)
 {
     //Normalize filter kernel
     float sum=0;
@@ -130,18 +130,17 @@ void firdes_lowpass_f(float *output, int length, float cutoff_rate, window_t win
     //  cutoff_rate is (cutoff frequency/sampling frequency)
     //Explanation at Chapter 16 of dspguide.com
     int middle=length/2;
-    float temp;
     float (*window_function)(float)  = firdes_get_window_kernel(window);
-    output[middle]=2*PI*cutoff_rate*window_function(0);
+    output[middle]=2*M_PI*cutoff_rate*window_function(0);
     for(int i=1; i<=middle; i++) //@@firdes_lowpass_f: calculate taps
     {
-        output[middle-i]=output[middle+i]=(sin(2*PI*cutoff_rate*i)/i)*window_function((float)i/middle);
-        //printf("%g %d %d %d %d | %g\n",output[middle-i],i,middle,middle+i,middle-i,sin(2*PI*cutoff_rate*i));
+        output[middle-i]=output[middle+i]=(sin(2*M_PI*cutoff_rate*i)/i)*window_function((float)i/middle);
+        //printf("%g %d %d %d %d | %g\n",output[middle-i],i,middle,middle+i,middle-i,sin(2*M_PI*cutoff_rate*i));
     }
     normalize_fir_f(output,output,length);
 }
 
-void firdes_bandpass_c(complexf *output, int length, float lowcut, float highcut, window_t window)
+void firdes_bandpass_c(float complex *output, int length, float lowcut, float highcut, window_t window)
 {
     //To generate a complex filter:
     //  1. we generate a real lowpass filter with a bandwidth of highcut-lowcut
@@ -152,17 +151,15 @@ void firdes_bandpass_c(complexf *output, int length, float lowcut, float highcut
     firdes_lowpass_f(realtaps, length, (highcut-lowcut)/2, window);
     float filter_center=(highcut+lowcut)/2;
 
-    float phase=0, sinval, cosval;
+    float phase=0;
+    float complex sincosval;
     for(int i=0; i<length; i++) //@@firdes_bandpass_c
     {
-        cosval=cos(phase);
-        sinval=sin(phase);
-        phase+=2*PI*filter_center;
-        while(phase>2*PI) phase-=2*PI; //@@firdes_bandpass_c
-        while(phase<0) phase+=2*PI;
-        iof(output,i)=cosval*realtaps[i];
-        qof(output,i)=sinval*realtaps[i];
-        //output[i] := realtaps[i] * e^j*w
+        sincosval=cos(phase) + I*sin(phase);
+        phase+=2*M_PI*filter_center;
+        while(phase>2*M_PI) phase-=2*M_PI; //@@firdes_bandpass_c
+        while(phase<0) phase+=2*M_PI;
+        output[i]=sincosval*realtaps[i];
     }
 }
 
@@ -183,25 +180,23 @@ int firdes_filter_len(float transition_bw)
 
 */
 
-float shift_math_cc(complexf *input, complexf* output, int input_size, float rate, float starting_phase)
+float shift_math_cc(const float complex *input, float complex *output, int input_size, float rate, float starting_phase)
 {
     rate*=2;
     //Shifts the complex spectrum. Basically a complex mixer. This version uses cmath.
     float phase=starting_phase;
-    float phase_increment=rate*PI;
-    float cosval, sinval;
+    float phase_increment=rate*M_PI;
+    float complex sincosval;
     for(int i=0;i<input_size; i++) //@shift_math_cc
     {
-        cosval=cos(phase);
-        sinval=sin(phase);
+        sincosval=cos(phase) + I*sin(phase);
         //we multiply two complex numbers.
         //how? enter this to maxima (software) for explanation:
         //   (a+b*%i)*(c+d*%i), rectform;
-        iof(output,i)=cosval*iof(input,i)-sinval*qof(input,i);
-        qof(output,i)=sinval*iof(input,i)+cosval*qof(input,i);
+        output[i]=sincosval*input[i];
         phase+=phase_increment;
-        while(phase>2*PI) phase-=2*PI; //@shift_math_cc: normalize phase
-        while(phase<0) phase+=2*PI;
+        while(phase>2*M_PI) phase-=2*M_PI; //@shift_math_cc: normalize phase
+        while(phase<0) phase+=2*M_PI;
     }
     return phase;
 }
@@ -216,7 +211,7 @@ shift_table_data_t shift_table_init(int table_size)
     output.table_size=table_size;
     for(int i=0;i<table_size;i++)
     {
-        output.table[i]=sin(((float)i/table_size)*(PI/2));
+        output.table[i]=sin(((float)i/table_size)*(M_PI/2));
     }
     return output;
 }
@@ -226,21 +221,21 @@ void shift_table_deinit(shift_table_data_t table_data)
     free(table_data.table);
 }
 
-float shift_table_cc(complexf* input, complexf* output, int input_size, float rate, shift_table_data_t table_data, float starting_phase)
+float shift_table_cc(const float complex *input, float complex *output, int input_size, float rate, shift_table_data_t table_data, float starting_phase)
 {
     //RTODO
     rate*=2;
     //Shifts the complex spectrum. Basically a complex mixer. This version uses a pre-built sine table.
     float phase=starting_phase;
-    float phase_increment=rate*PI;
-    float cosval, sinval;
+    float phase_increment=rate*M_PI;
+    float complex sincosval;
     for(int i=0;i<input_size; i++) //@shift_math_cc
     {
         int sin_index, cos_index, temp_index, sin_sign, cos_sign;
-        //float vphase=fmodf(phase,PI/2); //between 0 and 90deg
-        int quadrant=phase/(PI/2); //between 0 and 3
-        float vphase=phase-quadrant*(PI/2);
-        sin_index=(vphase/(PI/2))*table_data.table_size;
+        //float vphase=fmodf(phase,M_PI/2); //between 0 and 90deg
+        int quadrant=phase/(M_PI/2); //between 0 and 3
+        float vphase=phase-quadrant*(M_PI/2);
+        sin_index=(vphase/(M_PI/2))*table_data.table_size;
         cos_index=table_data.table_size-1-sin_index;
         if(quadrant&1) //in quadrant 1 and 3
         {
@@ -250,16 +245,14 @@ float shift_table_cc(complexf* input, complexf* output, int input_size, float ra
         }
         sin_sign=(quadrant>1)?-1:1; //in quadrant 2 and 3
         cos_sign=(quadrant&&quadrant<3)?-1:1; //in quadrant 1 and 2
-        sinval=sin_sign*table_data.table[sin_index];
-        cosval=cos_sign*table_data.table[cos_index];
+        sincosval=cos_sign*table_data.table[cos_index] + I*sin_sign*table_data.table[sin_index];
         //we multiply two complex numbers.
         //how? enter this to maxima (software) for explanation:
         //   (a+b*%i)*(c+d*%i), rectform;
-        iof(output,i)=cosval*iof(input,i)-sinval*qof(input,i);
-        qof(output,i)=sinval*iof(input,i)+cosval*qof(input,i);
+        output[i]=sincosval*input[i];
         phase+=phase_increment;
-        while(phase>2*PI) phase-=2*PI; //@shift_math_cc: normalize phase
-        while(phase<0) phase+=2*PI;
+        while(phase>2*M_PI) phase-=2*M_PI; //@shift_math_cc: normalize phase
+        while(phase<0) phase+=2*M_PI;
     }
     return phase;
 }
@@ -268,50 +261,44 @@ float shift_table_cc(complexf* input, complexf* output, int input_size, float ra
 shift_unroll_data_t shift_unroll_init(float rate, int size)
 {
     shift_unroll_data_t output;
-    output.phase_increment=2*rate*PI;
+    output.phase_increment=2*rate*M_PI;
     output.size = size;
-    output.dsin=(float*)malloc(sizeof(float)*size);
-    output.dcos=(float*)malloc(sizeof(float)*size);
+    output.dsincos=(float complex *)malloc(sizeof(float complex)*size);
     float myphase = 0;
     for(int i=0;i<size;i++)
     {
         myphase += output.phase_increment;
-        while(myphase>PI) myphase-=2*PI;
-        while(myphase<-PI) myphase+=2*PI;
-        output.dsin[i]=sin(myphase);
-        output.dcos[i]=cos(myphase);
+        while(myphase>M_PI) myphase-=2*M_PI;
+        while(myphase<-M_PI) myphase+=2*M_PI;
+        output.dsincos[i]=cos(myphase) + I*sin(myphase);
     }
     return output;
 }
 
-float shift_unroll_cc(complexf *input, complexf* output, int input_size, shift_unroll_data_t* d, float starting_phase)
+float shift_unroll_cc(const float complex *input, float complex *output, int input_size, shift_unroll_data_t* d, float starting_phase)
 {
     //input_size should be multiple of 4
     //fprintf(stderr, "shift_addfast_cc: input_size = %d\n", input_size);
-    float cos_start=cos(starting_phase);
-    float sin_start=sin(starting_phase);
-    register float cos_val, sin_val;
+    float complex sincos_start=cos(starting_phase) + I*sin(starting_phase);
+    register float complex sincos_val;
     for(int i=0;i<input_size; i++) //@shift_unroll_cc
     {
-        cos_val = cos_start * d->dcos[i] - sin_start * d->dsin[i];
-        sin_val  = sin_start * d->dcos[i] + cos_start * d->dsin[i];
-        iof(output,i)=cos_val*iof(input,i)-sin_val*qof(input,i);
-        qof(output,i)=sin_val*iof(input,i)+cos_val*qof(input,i);
+        sincos_val = sincos_start * d->dsincos[i];
+        output[i] = sincos_val * input[i];
     }
     starting_phase+=input_size*d->phase_increment;
-    while(starting_phase>PI) starting_phase-=2*PI;
-    while(starting_phase<-PI) starting_phase+=2*PI;
+    while(starting_phase>M_PI) starting_phase-=2*M_PI;
+    while(starting_phase<-M_PI) starting_phase+=2*M_PI;
     return starting_phase;
 }
 
 shift_addfast_data_t shift_addfast_init(float rate)
 {
     shift_addfast_data_t output;
-    output.phase_increment=2*rate*PI;
+    output.phase_increment=2*rate*M_PI;
     for(int i=0;i<4;i++)
     {
-        output.dsin[i]=sin(output.phase_increment*(i+1));
-        output.dcos[i]=cos(output.phase_increment*(i+1));
+        output.dsincos[i]=cos(output.phase_increment*(i+1)) + I*sin(output.phase_increment*(i+1));
     }
     return output;
 }
@@ -319,7 +306,7 @@ shift_addfast_data_t shift_addfast_init(float rate)
 #ifdef NEON_OPTS
 #pragma message "Manual NEON optimizations are ON: we have a faster shift_addfast_cc now."
 
-float shift_addfast_cc(complexf *input, complexf* output, int input_size, shift_addfast_data_t* d, float starting_phase)
+float shift_addfast_cc(const float complex *input, float complex *output, int input_size, shift_addfast_data_t* d, float starting_phase)
 {
     //input_size should be multiple of 4
     float cos_start[4], sin_start[4];
@@ -330,8 +317,7 @@ float shift_addfast_cc(complexf *input, complexf* output, int input_size, shift_
         sin_start[i] = sin(starting_phase);
     }
 
-    float* pdcos = d->dcos;
-    float* pdsin = d->dsin;
+    float complex *pdsincos = d->dsincos;
     register float* pinput = (float*)input;
     register float* pinput_end = (float*)(input+input_size);
     register float* poutput = (float*)output;
@@ -388,8 +374,8 @@ float shift_addfast_cc(complexf *input, complexf* output, int input_size, shift_
         "memory", "q0", "q1", "q2", "q4", "q5", "q6", "q7", "q8", "q9", "cc" //clobber list
     );
     starting_phase+=input_size*d->phase_increment;
-    while(starting_phase>PI) starting_phase-=2*PI;
-    while(starting_phase<-PI) starting_phase+=2*PI;
+    while(starting_phase>PI) starting_phase-=2*M_PI;
+    while(starting_phase<-PI) starting_phase+=2*M_PI;
     return starting_phase;
 }
 
@@ -398,66 +384,62 @@ float shift_addfast_cc(complexf *input, complexf* output, int input_size, shift_
 
 #if 1
 
+/*
 #define SADF_L1(j) cos_vals_ ## j = cos_start * dcos_ ## j - sin_start * dsin_ ## j; \
     sin_vals_ ## j = sin_start * dcos_ ## j + cos_start * dsin_ ## j;
 #define SADF_L2(j) iof(output,4*i+j)=(cos_vals_ ## j)*iof(input,4*i+j)-(sin_vals_ ## j)*qof(input,4*i+j); \
     qof(output,4*i+j)=(sin_vals_ ## j)*iof(input,4*i+j)+(cos_vals_ ## j)*qof(input,4*i+j);
+*/
 
-float shift_addfast_cc(complexf *input, complexf* output, int input_size, shift_addfast_data_t* d, float starting_phase)
+float shift_addfast_cc(const float complex *input, float complex *output, int input_size, shift_addfast_data_t* d, float starting_phase)
 {
     //input_size should be multiple of 4
     //fprintf(stderr, "shift_addfast_cc: input_size = %d\n", input_size);
-    float cos_start=cos(starting_phase);
-    float sin_start=sin(starting_phase);
-    float register cos_vals_0, cos_vals_1, cos_vals_2, cos_vals_3,
-        sin_vals_0, sin_vals_1, sin_vals_2, sin_vals_3,
-        dsin_0 = d->dsin[0], dsin_1 = d->dsin[1], dsin_2 = d->dsin[2], dsin_3 = d->dsin[3],
-        dcos_0 = d->dcos[0], dcos_1 = d->dcos[1], dcos_2 = d->dcos[2], dcos_3 = d->dcos[3];
+    float complex sincos_start=cos(starting_phase) + I*sin(starting_phase);
+    register float complex sincos_vals_0, sincos_vals_1, sincos_vals_2, sincos_vals_3,
+        dsincos_0 = d->dsincos[0], dsincos_1 = d->dsincos[1], dsincos_2 = d->dsincos[2], dsincos_3 = d->dsincos[3];
 
     for(int i=0;i<input_size/4; i++) //@shift_addfast_cc
     {
-        SADF_L1(0)
-        SADF_L1(1)
-        SADF_L1(2)
-        SADF_L1(3)
-        SADF_L2(0)
-        SADF_L2(1)
-        SADF_L2(2)
-        SADF_L2(3)
-        cos_start = cos_vals_3;
-        sin_start = sin_vals_3;
+        sincos_vals_0 = sincos_start * dsincos_0;
+        sincos_vals_1 = sincos_start * dsincos_1;
+        sincos_vals_2 = sincos_start * dsincos_2;
+        sincos_vals_3 = sincos_start * dsincos_3;
+
+	output[4*i+0] = sincos_vals_0 * input[4*i+0];
+	output[4*i+1] = sincos_vals_1 * input[4*i+1];
+	output[4*i+2] = sincos_vals_2 * input[4*i+2];
+	output[4*i+3] = sincos_vals_3 * input[4*i+3];
+
+	sincos_start = sincos_vals_3;
     }
     starting_phase+=input_size*d->phase_increment;
-    while(starting_phase>PI) starting_phase-=2*PI;
-    while(starting_phase<-PI) starting_phase+=2*PI;
+    while(starting_phase>M_PI) starting_phase-=2*M_PI;
+    while(starting_phase<-M_PI) starting_phase+=2*M_PI;
     return starting_phase;
 }
 #else
-float shift_addfast_cc(complexf *input, complexf* output, int input_size, shift_addfast_data_t* d, float starting_phase)
+float shift_addfast_cc(const float complex *input, float complex *output, int input_size, shift_addfast_data_t* d, float starting_phase)
 {
     //input_size should be multiple of 4
     //fprintf(stderr, "shift_addfast_cc: input_size = %d\n", input_size);
-    float cos_start=cos(starting_phase);
-    float sin_start=sin(starting_phase);
-    float cos_vals[4], sin_vals[4];
+    float complex sincos_start=cos(starting_phase) + I*sin(starting_phase);;
+    float complex sincos_vals[4];
     for(int i=0;i<input_size/4; i++) //@shift_addfast_cc
     {
         for(int j=0;j<4;j++) //@shift_addfast_cc
         {
-            cos_vals[j] = cos_start * d->dcos[j] - sin_start * d->dsin[j];
-            sin_vals[j] = sin_start * d->dcos[j] + cos_start * d->dsin[j];
+            sincos_vals[j] = sincos_start * d->dsincos[j];
         }
         for(int j=0;j<4;j++) //@shift_addfast_cc
         {
-            iof(output,4*i+j)=cos_vals[j]*iof(input,4*i+j)-sin_vals[j]*qof(input,4*i+j);
-            qof(output,4*i+j)=sin_vals[j]*iof(input,4*i+j)+cos_vals[j]*qof(input,4*i+j);
+            output[4*i+j]=sincos_vals[j]*iof(input[4*i+j]
         }
-        cos_start = cos_vals[3];
-        sin_start = sin_vals[3];
+        sincos_start = sincos_vals[3];
     }
     starting_phase+=input_size*d->phase_increment;
-    while(starting_phase>PI) starting_phase-=2*PI;
-    while(starting_phase<-PI) starting_phase+=2*PI;
+    while(starting_phase>PI) starting_phase-=2*M_PI;
+    while(starting_phase<-PI) starting_phase+=2*M_PI;
     return starting_phase;
 }
 #endif
@@ -469,7 +451,7 @@ float shift_addfast_cc(complexf *input, complexf* output, int input_size, shift_
 
 //max help: http://community.arm.com/groups/android-community/blog/2015/03/27/arm-neon-programming-quick-reference
 
-int fir_decimate_cc(complexf *input, complexf *output, int input_size, int decimation, float *taps, int taps_length)
+int fir_decimate_cc(const float complex *input, float complex *output, int input_size, int decimation, const float *taps, int taps_length)
 {
     //Theory: http://www.dspguru.com/dsp/faqs/multirate/decimation
     //It uses real taps. It returns the number of output samples actually written.
@@ -525,7 +507,7 @@ q4, q5: accumulator for I branch and Q branch (will be the output)
 
 #else
 
-int fir_decimate_cc(complexf *input, complexf *output, int input_size, int decimation, float *taps, int taps_length)
+int fir_decimate_cc(const float complex *input, float complex *output, int input_size, int decimation, const float *taps, int taps_length)
 {
     //Theory: http://www.dspguru.com/dsp/faqs/multirate/decimation
     //It uses real taps. It returns the number of output samples actually written.
@@ -537,13 +519,9 @@ int fir_decimate_cc(complexf *input, complexf *output, int input_size, int decim
     for(int i=0; i<input_size; i+=decimation) //@fir_decimate_cc: outer loop
     {
         if(i+taps_length>input_size) break;
-        float acci=0;
-        for(int ti=0; ti<taps_length; ti++) acci += (iof(input,i+ti)) * taps[ti]; //@fir_decimate_cc: i loop
-        float accq=0;
-        for(int ti=0; ti<taps_length; ti++) accq += (qof(input,i+ti)) * taps[ti]; //@fir_decimate_cc: q loop
-        iof(output,oi)=acci;
-        qof(output,oi)=accq;
-        oi++;
+        float complex acc=0;
+        for(int ti=0; ti<taps_length; ti++) acc += input[i+ti] * taps[ti]; //@fir_decimate_cc: i loop
+        output[oi++]=acc;
     }
     return oi;
 }
@@ -551,7 +529,7 @@ int fir_decimate_cc(complexf *input, complexf *output, int input_size, int decim
 #endif
 
 /*
-int fir_decimate_cc(complexf *input, complexf *output, int input_size, int decimation, float *taps, int taps_length)
+int fir_decimate_cc(const float complex *input, float complex *output, int input_size, int decimation, float *taps, int taps_length)
 {
     //Theory: http://www.dspguru.com/dsp/faqs/multirate/decimation
     //It uses real taps. It returns the number of output samples actually written.
@@ -576,7 +554,7 @@ int fir_decimate_cc(complexf *input, complexf *output, int input_size, int decim
 }
 */
 
-int fir_interpolate_cc(complexf *input, complexf *output, int input_size, int interpolation, float *taps, int taps_length)
+int fir_interpolate_cc(const float complex *input, float complex *output, int input_size, int interpolation, const float *taps, int taps_length)
 {
     //i:  input index
     //oi: output index
@@ -589,29 +567,25 @@ int fir_interpolate_cc(complexf *input, complexf *output, int input_size, int in
         if(i*interpolation + (interpolation-1) + taps_length > input_size*interpolation) break;
         for(int ip=0; ip<interpolation; ip++)
         {
-            float acci=0;
-            float accq=0;
+            float complex acc=0;
             //int tistart = (interpolation-ip)%interpolation; 
             int tistart = (interpolation-ip); //why does this work? why don't we need the % part?
-            for(int ti=tistart, si=0; ti<taps_length; (ti+=interpolation), (si++)) acci += (iof(input,i+si)) * taps[ti]; //@fir_interpolate_cc: i loop
-            for(int ti=tistart, si=0; ti<taps_length; (ti+=interpolation), (si++)) accq += (qof(input,i+si)) * taps[ti]; //@fir_interpolate_cc: q loop
-            iof(output,oi)=acci;
-            qof(output,oi)=accq;
-            oi++;
+            for(int ti=tistart, si=0; ti<taps_length; (ti+=interpolation), (si++)) acc += input[i+si] * taps[ti]; //@fir_interpolate_cc: i loop
+            output[oi++]=acc;
         }
     }
     return oi;
 }
 
 
-rational_resampler_ff_t rational_resampler_ff(float *input, float *output, int input_size, int interpolation, int decimation, float *taps, int taps_length, int last_taps_delay)
+rational_resampler_ff_t rational_resampler_ff(const float *input, float *output, int input_size, int interpolation, int decimation, const float *taps, int taps_length, int last_taps_delay)
 {
 
     //Theory: http://www.dspguru.com/dsp/faqs/multirate/resampling
     //oi: output index, i: tap index
     int output_size=input_size*interpolation/decimation;
     int oi;
-    int startingi, delayi;
+    int startingi=0, delayi=0;
     //fprintf(stderr,"rational_resampler_ff | interpolation = %d | decimation = %d\ntaps_length = %d | input_size = %d | output_size = %d | last_taps_delay = %d\n",interpolation,decimation,taps_length,input_size,output_size,last_taps_delay);
     for (oi=0; oi<output_size; oi++) //@rational_resampler_ff (outer loop)
     {
@@ -672,14 +646,14 @@ void rational_resampler_get_lowpass_f(float* output, int output_size, int interp
     firdes_lowpass_f(output, output_size, cutoff/2, window);
 }
 
-float inline fir_one_pass_ff(float* input, float* taps, int taps_length)
+float inline fir_one_pass_ff(const float *input, const float *taps, int taps_length)
 {
     float acc=0;
     for(int i=0;i<taps_length;i++) acc+=taps[i]*input[i]; //@fir_one_pass_ff
     return acc;
 }
 
-old_fractional_decimator_ff_t old_fractional_decimator_ff(float* input, float* output, int input_size, float rate, float *taps, int taps_length, old_fractional_decimator_ff_t d)
+old_fractional_decimator_ff_t old_fractional_decimator_ff(const float *input, float *output, int input_size, float rate, const float *taps, int taps_length, old_fractional_decimator_ff_t d)
 {
     if(rate<=1.0) return d; //sanity check, can't decimate <=1.0
     //This routine can handle floating point decimation rates.
@@ -687,7 +661,7 @@ old_fractional_decimator_ff_t old_fractional_decimator_ff(float* input, float* o
     int oi=0;
     int index_high;
     float where=d.remain;
-    float result_high, result_low;
+    float result_high=0, result_low;
     if(where==0.0) //in the first iteration index_high may be zero (so using the item index_high-1 would lead to invalid memory access).
     {
         output[oi++]=fir_one_pass_ff(input,taps,taps_length);
@@ -712,7 +686,7 @@ old_fractional_decimator_ff_t old_fractional_decimator_ff(float* input, float* o
     return d;
 }
 
-fractional_decimator_ff_t fractional_decimator_ff_init(float rate, int num_poly_points, float* taps, int taps_length)
+fractional_decimator_ff_t fractional_decimator_ff_init(float rate, int num_poly_points, const float *taps, int taps_length)
 {
     fractional_decimator_ff_t d;
     d.num_poly_points = num_poly_points&~1; //num_poly_points needs to be even!
@@ -748,7 +722,7 @@ fractional_decimator_ff_t fractional_decimator_ff_init(float rate, int num_poly_
 }
 
 #define DEBUG_ASSERT 1
-void fractional_decimator_ff(float* input, float* output, int input_size, fractional_decimator_ff_t* d)
+void fractional_decimator_ff(const float *input, float* output, int input_size, fractional_decimator_ff_t* d)
 {
     //This routine can handle floating point decimation rates.
     //It applies polynomial interpolation to samples that are taken into consideration from a pre-filtered input.
@@ -763,8 +737,8 @@ void fractional_decimator_ff(float* input, float* output, int input_size, fracti
     for(;(index_high=ceilf(d->where))+d->num_poly_points+d->taps_length<input_size;d->where+=d->rate) //@fractional_decimator_ff
     {
         //d->num_poly_points above is theoretically more than we could have here, but this makes the spectrum look good
-        int sxifirst = FD_INDEX_LOW + d->xifirst; 
-        int sxilast = FD_INDEX_LOW + d->xilast; 
+        //int sxifirst = FD_INDEX_LOW + d->xifirst; 
+        //int sxilast = FD_INDEX_LOW + d->xilast; 
         if(d->taps) 
             for(int wi=0;wi<d->num_poly_points;wi++) d->filtered_buf[wi] = fir_one_pass_ff(input+FD_INDEX_LOW+wi, d->taps, d->taps_length);
         else
@@ -811,7 +785,7 @@ void fractional_decimator_ff(float* input, float* output, int input_size, fracti
     However, I think I should just rather do a continuous big buffer.
 */
 
-void apply_fir_fft_cc(FFT_PLAN_T* plan, FFT_PLAN_T* plan_inverse, complexf* taps_fft, complexf* last_overlap, int overlap_size)
+void apply_fir_fft_cc(FFT_PLAN_T* plan, FFT_PLAN_T* plan_inverse, const float complex *taps_fft, float complex *last_overlap, int overlap_size)
 {
     //use the overlap & add method for filtering
 
@@ -819,31 +793,28 @@ void apply_fir_fft_cc(FFT_PLAN_T* plan, FFT_PLAN_T* plan_inverse, complexf* taps
     fft_execute(plan);
 
     //multiply the filter and the input
-    complexf* in = plan->output;
-    complexf* out = plan_inverse->input;
+    float complex *in = plan->output;
+    float complex *out = plan_inverse->input;
 
     for(int i=0;i<plan->size;i++) //@apply_fir_fft_cc: multiplication
     {
-        iof(out,i)=iof(in,i)*iof(taps_fft,i)-qof(in,i)*qof(taps_fft,i);
-        qof(out,i)=iof(in,i)*qof(taps_fft,i)+qof(in,i)*iof(taps_fft,i);
+        out[i]=in[i]*taps_fft[i];
     }
 
     //calculate inverse FFT on multiplied buffer
     fft_execute(plan_inverse);
 
     //add the overlap of the previous segment
-    complexf* result = plan_inverse->output;
+    float complex *result = plan_inverse->output;
 
     for(int i=0;i<plan->size;i++) //@apply_fir_fft_cc: normalize by fft_size
     {
-        iof(result,i)/=plan->size;
-        qof(result,i)/=plan->size;
+        result[i]/=plan->size;
     }
 
     for(int i=0;i<overlap_size;i++) //@apply_fir_fft_cc: add overlap
     {
-        iof(result,i)=iof(result,i)+iof(last_overlap,i);
-        qof(result,i)=qof(result,i)+qof(last_overlap,i);
+        result[i]+=last_overlap[i];
     }
 
 }
@@ -858,12 +829,12 @@ void apply_fir_fft_cc(FFT_PLAN_T* plan, FFT_PLAN_T* plan_inverse, complexf* taps
 
 */
 
-void amdemod_cf(complexf* input, float *output, int input_size)
+void amdemod_cf(const float complex *input, float *output, int input_size)
 {
     //@amdemod: i*i+q*q
     for (int i=0; i<input_size; i++)
     {
-        output[i]=iof(input,i)*iof(input,i)+qof(input,i)*qof(input,i);
+        output[i] = creal(input[i])*creal(input[i]) + cimag(input[i])*cimag(input[i]);
     }
     //@amdemod: sqrt
     for (int i=0; i<input_size; i++)
@@ -872,7 +843,7 @@ void amdemod_cf(complexf* input, float *output, int input_size)
     }
 }
 
-void amdemod_estimator_cf(complexf* input, float *output, int input_size, float alpha, float beta)
+void amdemod_estimator_cf(const float complex *input, float *output, int input_size, float alpha, float beta)
 {
     //concept is explained here:
     //http://www.dspguru.com/dsp/tricks/magnitude-estimator
@@ -887,20 +858,21 @@ void amdemod_estimator_cf(complexf* input, float *output, int input_size, float 
     //@amdemod_estimator
     for (int i=0; i<input_size; i++)
     {
-        float abs_i=iof(input,i);
+        float abs_i=creal(input[i]);
+        float abs_q=cimag(input[i]);
         if(abs_i<0) abs_i=-abs_i;
-        float abs_q=qof(input,i);
         if(abs_q<0) abs_q=-abs_q;
-        float max_iq=abs_i;
-        if(abs_q>max_iq) max_iq=abs_q;
+
+	float max_iq=abs_i;
         float min_iq=abs_i;
+        if(abs_q>max_iq) max_iq=abs_q;
         if(abs_q<min_iq) min_iq=abs_q;
 
         output[i]=alpha*max_iq+beta*min_iq;
     }
 }
 
-dcblock_preserve_t dcblock_ff(float* input, float* output, int input_size, float a, dcblock_preserve_t preserved)
+dcblock_preserve_t dcblock_ff(const float *input, float* output, int input_size, float a, dcblock_preserve_t preserved)
 {
     //after AM demodulation, a DC blocking filter should be used to remove the DC component from the signal.
     //Concept: http://peabody.sapp.org/class/dmp2/lab/dcblock/
@@ -917,7 +889,7 @@ dcblock_preserve_t dcblock_ff(float* input, float* output, int input_size, float
     return preserved;
 }
 
-float fastdcblock_ff(float* input, float* output, int input_size, float last_dc_level)
+float fastdcblock_ff(const float *input, float *output, int input_size, float last_dc_level)
 {
     //this DC block filter does moving average block-by-block.
     //this is the most computationally efficient
@@ -943,7 +915,7 @@ float fastdcblock_ff(float* input, float* output, int input_size, float last_dc_
 //#define FASTAGC_MAX_GAIN (65e3)
 #define FASTAGC_MAX_GAIN 50
 
-void fastagc_ff(fastagc_ff_t* input, float* output)
+void fastagc_ff(fastagc_ff_t *input, float *output)
 {
     //Gain is processed on blocks of samples.
     //You have to supply three blocks of samples before the first block comes out.
@@ -1001,18 +973,18 @@ void fastagc_ff(fastagc_ff_t* input, float* output)
 */
 
 
-float fmdemod_atan_cf(complexf* input, float *output, int input_size, float last_phase)
+float fmdemod_atan_cf(const float complex *input, float *output, int input_size, float last_phase)
 {
     //GCC most likely won't vectorize nor atan, nor atan2.
     //For more comments, look at: https://github.com/simonyiszk/minidemod/blob/master/minidemod-wfm-atan.c
     float phase, dphase;
     for (int i=0; i<input_size; i++) //@fmdemod_atan_novect
     {
-        phase=argof(input,i);
+        phase=carg(input[i]);
         dphase=phase-last_phase;
-        if(dphase<-PI) dphase+=2*PI;
-        if(dphase>PI) dphase-=2*PI;
-        output[i]=dphase/PI;
+        if(dphase<-M_PI) dphase+=2*M_PI;
+        if(dphase>M_PI) dphase-=2*M_PI;
+        output[i]=dphase/M_PI;
         last_phase=phase;
     }
     return last_phase;
@@ -1021,15 +993,15 @@ float fmdemod_atan_cf(complexf* input, float *output, int input_size, float last
 #define fmdemod_quadri_K 0.340447550238101026565118445432744920253753662109375
 //this constant ensures proper scaling for qa_fmemod testcases for SNR calculation and more.
 
-complexf fmdemod_quadri_novect_cf(complexf* input, float* output, int input_size, complexf last_sample)
+float complex fmdemod_quadri_novect_cf(const float complex *input, float* output, int input_size, float complex last_sample)
 {
-    output[0]=fmdemod_quadri_K*(iof(input,0)*(qof(input,0)-last_sample.q)-qof(input,0)*(iof(input,0)-last_sample.i))/(iof(input,0)*iof(input,0)+qof(input,0)*qof(input,0));
+    output[0]=fmdemod_quadri_K*(creal(input[0])*cimag(input[0])-cimag(last_sample)-cimag(input[0])*creal(input[0])-creal(last_sample))/(creal(input[0])*creal(input[0])+cimag(input[0])*cimag(input[0]));
     for (int i=1; i<input_size; i++) //@fmdemod_quadri_novect_cf
     {
-        float qnow=qof(input,i);
-        float qlast=qof(input,i-1);
-        float inow=iof(input,i);
-        float ilast=iof(input,i-1);
+        float qnow=cimag(input[i]);
+        float qlast=cimag(input[i-1]);
+        float inow=creal(input[i]);
+        float ilast=creal(input[i-1]);
         output[i]=fmdemod_quadri_K*(inow*(qnow-qlast)-qnow*(inow-ilast))/(inow*inow+qnow*qnow);
         //TODO: expression can be simplified as: (qnow*ilast-inow*qlast)/(inow*inow+qnow*qnow)
     }
@@ -1037,30 +1009,30 @@ complexf fmdemod_quadri_novect_cf(complexf* input, float* output, int input_size
 }
 
 
-complexf fmdemod_quadri_cf(complexf* input, float* output, int input_size, float *temp, complexf last_sample)
+float complex fmdemod_quadri_cf(const float complex *input, float* output, int input_size, float *temp, float complex last_sample)
 {
     float* temp_dq=temp;
     float* temp_di=temp+input_size;
 
-    temp_dq[0]=qof(input,0)-last_sample.q;
+    temp_dq[0]=cimag(input[0])-cimag(last_sample);
     for (int i=1; i<input_size; i++) //@fmdemod_quadri_cf: dq
     {
-        temp_dq[i]=qof(input,i)-qof(input,i-1);
+        temp_dq[i]=cimag(input[i])-cimag(input[i-1]);
     }
 
-    temp_di[0]=iof(input,0)-last_sample.i;
+    temp_di[0]=creal(input[0])-creal(last_sample);
     for (int i=1; i<input_size; i++) //@fmdemod_quadri_cf: di
     {
-        temp_di[i]=iof(input,i)-iof(input,i-1);
+        temp_di[i]=creal(input[i])-creal(input[i-1]);
     }
 
     for (int i=0; i<input_size; i++) //@fmdemod_quadri_cf: output numerator
     {
-        output[i]=(iof(input,i)*temp_dq[i]-qof(input,i)*temp_di[i]);
+        output[i]=(creal(input[i])*temp_dq[i]-cimag(input[i])*temp_di[i]);
     }
     for (int i=0; i<input_size; i++) //@fmdemod_quadri_cf: output denomiator
     {
-        temp[i]=iof(input,i)*iof(input,i)+qof(input,i)*qof(input,i);
+        temp[i]=creal(input[i])*creal(input[i])+cimag(input[i])*cimag(input[i]);
     }
     for (int i=0; i<input_size; i++) //@fmdemod_quadri_cf: output division
     {
@@ -1073,12 +1045,12 @@ complexf fmdemod_quadri_cf(complexf* input, float* output, int input_size, float
 inline int is_nan(float f)
 {
     //http://stackoverflow.com/questions/570669/checking-if-a-double-or-float-is-nan-in-c
-    unsigned u = *(unsigned*)&f;
-    return (u&0x7F800000) == 0x7F800000 && (u&0x7FFFFF); // Both NaN and qNan.
+    unsigned int *u = (unsigned int*)&f;
+    return (*u&0x7F800000) == 0x7F800000 && (*u&0x7FFFFF); // Both NaN and qNan.
 }
 
 
-float deemphasis_wfm_ff (float* input, float* output, int input_size, float tau, int sample_rate, float last_output)
+float deemphasis_wfm_ff (const float *input, float *output, int input_size, float tau, int sample_rate, float last_output)
 {
     /*
         typical time constant (tau) values:
@@ -1098,7 +1070,7 @@ float deemphasis_wfm_ff (float* input, float* output, int input_size, float tau,
 
 #define DNFMFF_ADD_ARRAY(x) if(sample_rate==x) { taps=deemphasis_nfm_predefined_fir_##x; taps_length=sizeof(deemphasis_nfm_predefined_fir_##x)/sizeof(float); }
 
-int deemphasis_nfm_ff (float* input, float* output, int input_size, int sample_rate)
+int deemphasis_nfm_ff (const float *input, float *output, int input_size, int sample_rate)
 {
     /*
         Warning! This only works on predefined samplerates, as it uses fixed FIR coefficients defined in predefined.h
@@ -1127,7 +1099,7 @@ int deemphasis_nfm_ff (float* input, float* output, int input_size, int sample_r
     return i; //number of samples processed (and output samples)
 }
 
-void limit_ff(float* input, float* output, int input_size, float max_amplitude)
+void limit_ff(const float *input, float *output, int input_size, float max_amplitude)
 {
     for (int i=0; i<input_size; i++) //@limit_ff
     {
@@ -1136,12 +1108,12 @@ void limit_ff(float* input, float* output, int input_size, float max_amplitude)
     }
 }
 
-void gain_ff(float* input, float* output, int input_size, float gain)
+void gain_ff(const float *input, float *output, int input_size, float gain)
 {
     for(int i=0;i<input_size;i++) output[i]=gain*input[i]; //@gain_ff
 }
 
-float get_power_f(float* input, int input_size, int decimation)
+float get_power_f(const float *input, int input_size, int decimation)
 {
     float acc = 0;
     for(int i=0;i<input_size;i+=decimation)
@@ -1151,12 +1123,12 @@ float get_power_f(float* input, int input_size, int decimation)
     return acc;
 }
 
-float get_power_c(complexf* input, int input_size, int decimation)
+float get_power_c(const float complex *input, int input_size, int decimation)
 {
     float acc = 0;
     for(int i=0;i<input_size;i+=decimation)
     {
-        acc += (iof(input,i)*iof(input,i)+qof(input,i)*qof(input,i))/input_size;
+        acc += (creal(input[i])*creal(input[i]) + cimag(input[i])*cimag(input[i])) / input_size;
     }
     return acc;
 }
@@ -1171,27 +1143,27 @@ float get_power_c(complexf* input, int input_size, int decimation)
 
 */
 
-void add_dcoffset_cc(complexf* input, complexf* output, int input_size)
+void add_dcoffset_cc(const float complex *input, float complex *output, int input_size)
 {
-    for(int i=0;i<input_size;i++) iof(output,i)=0.5+iof(input,i)/2;
-    for(int i=0;i<input_size;i++) qof(output,i)=qof(input,i)/2;
+    for(int i=0;i<input_size;i++) {
+	output[i] = 0.5 + input[i]/2;
+    }
 }
 
-float fmmod_fc(float* input, complexf* output, int input_size, float last_phase)
+float fmmod_fc(const float *input, float complex *output, int input_size, float last_phase)
 {
     float phase=last_phase;
     for(int i=0;i<input_size;i++)
     {
-        phase+=input[i]*PI;
-        while(phase>PI) phase-=2*PI;
-        while(phase<=-PI) phase+=2*PI;
-        iof(output,i)=cos(phase);
-        qof(output,i)=sin(phase);
+        phase+=input[i]*M_PI;
+        while(phase>M_PI) phase-=2*M_PI;
+        while(phase<=-M_PI) phase+=2*M_PI;
+        output[i]=cos(phase) + I*sin(phase);
     }
     return phase;
 }
 
-void fixed_amplitude_cc(complexf* input, complexf* output, int input_size, float new_amplitude)
+void fixed_amplitude_cc(const float complex *input, float complex *output, int input_size, float new_amplitude)
 {
     for(int i=0;i<input_size;i++)
     {
@@ -1200,10 +1172,9 @@ void fixed_amplitude_cc(complexf* input, complexf* output, int input_size, float
         //qof(output,i)=sin(phase)*amp;
 
         //A faster solution:
-        float amplitude_now = sqrt(iof(input,i)*iof(input,i)+qof(input,i)*qof(input,i));
+        float amplitude_now = sqrt(creal(input[i])*creal(input[i]) + cimag(input[i])*cimag(input[i]));
         float gain = (amplitude_now > 0) ? new_amplitude / amplitude_now : 0;
-        iof(output,i)=iof(input,i)*gain;
-        qof(output,i)=qof(input,i)*gain;
+        output[i] = input[i]*gain;
     }
 }
 
@@ -1242,14 +1213,13 @@ int next_pow2(int x)
     return -1;
 }
 
-void apply_window_c(complexf* input, complexf* output, int size, window_t window)
+void apply_window_c(const float complex *input, float complex *output, int size, window_t window)
 {
     float (*window_function)(float)=firdes_get_window_kernel(window);
     for(int i=0;i<size;i++) //@apply_window_c
     {
         float rate=(float)i/(size-1);
-        iof(output,i)=iof(input,i)*window_function(2.0*rate+1.0);
-        qof(output,i)=qof(input,i)*window_function(2.0*rate+1.0);
+        output[i] = input[i]*window_function(2.0*rate+1.0);
     }
 }
 
@@ -1266,16 +1236,15 @@ float *precalculate_window(int size, window_t window)
     return windowt;
 }
 
-void apply_precalculated_window_c(complexf* input, complexf* output, int size, float *windowt)
+void apply_precalculated_window_c(const float complex *input, float complex *output, int size, float *windowt)
 {
     for(int i=0;i<size;i++) //@apply_precalculated_window_c
     {
-        iof(output,i)=iof(input,i)*windowt[i];
-        qof(output,i)=qof(input,i)*windowt[i];
+        output[i] = input[i] * windowt[i];
     }
 }
 
-void apply_precalculated_window_f(float* input, float* output, int size, float *windowt)
+void apply_precalculated_window_f(const float *input, float* output, int size, float *windowt)
 {
 	for(int i=0;i<size;i++) //@apply_precalculated_window_f
 	{
@@ -1283,7 +1252,7 @@ void apply_precalculated_window_f(float* input, float* output, int size, float *
 	}
 }
 
-void apply_window_f(float* input, float* output, int size, window_t window)
+void apply_window_f(const float *input, float* output, int size, window_t window)
 {
     float (*window_function)(float)=firdes_get_window_kernel(window);
     for(int i=0;i<size;i++) //@apply_window_f
@@ -1293,30 +1262,30 @@ void apply_window_f(float* input, float* output, int size, window_t window)
     }
 }
 
-void logpower_cf(complexf* input, float* output, int size, float add_db)
+void logpower_cf(const float complex *input, float* output, int size, float add_db)
 {
-    for(int i=0;i<size;i++) output[i]=iof(input,i)*iof(input,i) + qof(input,i)*qof(input,i); //@logpower_cf: pass 1
+    for(int i=0;i<size;i++) output[i]=creal(input[i])*creal(input[i]) + cimag(input[i])*cimag(input[i]); //@logpower_cf: pass 1
 
     for(int i=0;i<size;i++) output[i]=log10(output[i]); //@logpower_cf: pass 2
 
     for(int i=0;i<size;i++) output[i]=10*output[i]+add_db; //@logpower_cf: pass 3
 }
 
-void accumulate_power_cf(complexf* input, float* output, int size)
+void accumulate_power_cf(const float complex *input, float* output, int size)
 {
-    for(int i=0;i<size;i++) output[i] += iof(input,i)*iof(input,i) + qof(input,i)*qof(input,i); //@logpower_cf: pass 1
+    for(int i=0;i<size;i++) output[i] += creal(input[i])*creal(input[i]) + cimag(input[i])*cimag(input[i]); //@logpower_cf: pass 1
 }
 
-void log_ff(float* input, float* output, int size, float add_db) {
+void log_ff(const float *input, float* output, int size, float add_db) {
     for(int i=0;i<size;i++) output[i]=log10(input[i]); //@logpower_cf: pass 2
 
     for(int i=0;i<size;i++) output[i]=10*output[i]+add_db; //@logpower_cf: pass 3
 }
 
-float total_logpower_cf(complexf* input, int input_size)
+float total_logpower_cf(const float complex *input, int input_size)
 {
     float acc = 0; 
-    for(int i=0;i<input_size;i++) acc+=(iof(input,i)*iof(input,i) + qof(input,i)*qof(input,i));
+    for(int i=0;i<input_size;i++) acc+=(creal(input[i])*creal(input[i]) + cimag(input[i])*cimag(input[i]));
     return 10*log10(acc/input_size);
 }
 
@@ -1367,7 +1336,7 @@ psk31_varicode_item_t psk31_varicode_items[] =
     { .code = 0b1101111111, .bitcount=10,   .ascii=0x1f }, //US, unit separator
     { .code = 0b1,          .bitcount=1,    .ascii=0x20 }, //szóköz
     { .code = 0b111111111,  .bitcount=9,    .ascii=0x21 }, //!
-    { .code = 0b101011111,  .bitcount=9,    .ascii=0x22 }, //"
+    { .code = 0b101011111,  .bitcount=9,    .ascii=0x22 }, //''
     { .code = 0b111110101,  .bitcount=9,    .ascii=0x23 }, //#
     { .code = 0b111011011,  .bitcount=9,    .ascii=0x24 }, //$
     { .code = 0b1011010101, .bitcount=10,   .ascii=0x25 }, //%
@@ -1425,7 +1394,7 @@ psk31_varicode_item_t psk31_varicode_items[] =
     { .code = 0b101111011,  .bitcount=9,    .ascii=0x59 }, //Y
     { .code = 0b1010101101, .bitcount=10,   .ascii=0x5a }, //Z
     { .code = 0b111110111,  .bitcount=9,    .ascii=0x5b }, //[
-    { .code = 0b111101111,  .bitcount=9,    .ascii=0x5c }, //\
+    { .code = 0b111101111,  .bitcount=9,    .ascii=0x5c }, //backslash
     { .code = 0b111111011,  .bitcount=9,    .ascii=0x5d }, //]
     { .code = 0b1010111111, .bitcount=10,   .ascii=0x5e }, //^
     { .code = 0b101101101,  .bitcount=9,    .ascii=0x5f }, //_
@@ -1537,7 +1506,7 @@ char psk31_varicode_decoder_push(unsigned long long* status_shr, unsigned char s
 {
     *status_shr=((*status_shr)<<1)|(!!symbol); //shift new bit in shift register
     //fprintf(stderr,"*status_shr = %llx\n", *status_shr);
-    if((*status_shr)&0xFFF==0) return 0;
+    if(((*status_shr)&0xFFF)==0) return 0;
     for(int i=0;i<n_psk31_varicode_items;i++)
     {
         //fprintf(stderr,"| i = %d | %llx ?= %llx | bitsall = %d\n", i, psk31_varicode_items[i].code<<2, (*status_shr)&psk31_varicode_masklen_helper[(psk31_varicode_items[i].bitcount+4)&63], (psk31_varicode_items[i].bitcount+4)&63);
@@ -1548,7 +1517,7 @@ char psk31_varicode_decoder_push(unsigned long long* status_shr, unsigned char s
     return 0;
 }
 
-void psk31_varicode_encoder_u8_u8(unsigned char* input, unsigned char* output, int input_size, int output_max_size, int* input_processed, int* output_size)
+void psk31_varicode_encoder_u8_u8(const unsigned char* input, unsigned char* output, int input_size, int output_max_size, int* input_processed, int* output_size)
 {
     (*output_size)=0;
     for((*input_processed)=0; (*input_processed)<input_size; (*input_processed)++)
@@ -1659,7 +1628,7 @@ char rtty_baudot_decoder_push(rtty_baudot_decoder_t* s, unsigned char symbol)
 //  behaviour on 1.5 stop bits
 //  check all exit conditions
 
-void serial_line_decoder_f_u8(serial_line_t* s, float* input, unsigned char* output, int input_size)
+void serial_line_decoder_f_u8(serial_line_t* s, const float* input, unsigned char* output, int input_size)
 {
     static int abs_samples_helper = 0;
     abs_samples_helper += s->input_used;
@@ -1675,14 +1644,14 @@ void serial_line_decoder_f_u8(serial_line_t* s, float* input, unsigned char* out
         int i;
         for(i=1;i<input_size;i++) if(input[i] < 0 && input[i-1] > 0) { startbit_start=i; break; }
 
-        if(startbit_start == -1) { s->input_used += i; DEBUG_SERIAL_LINE_DECODER && fprintf(stderr,"sld:startbit_not_found (+%d)\n", s->input_used); return; }
-        DEBUG_SERIAL_LINE_DECODER && fprintf(stderr,"sld:startbit_found at %d (%d)\n", startbit_start, iabs_samples_helper + startbit_start);
+        if(startbit_start == -1) { s->input_used += i; if (DEBUG_SERIAL_LINE_DECODER) fprintf(stderr,"sld:startbit_not_found (+%d)\n", s->input_used); return; }
+        if (DEBUG_SERIAL_LINE_DECODER) fprintf(stderr,"sld:startbit_found at %d (%d)\n", startbit_start, iabs_samples_helper + startbit_start);
 
         //If the stop bit would be too far so that we reached the end of the buffer, then we return failed.
         //The caller can rearrange the buffer so that the whole character fits into it.
         float all_bits = 1 + s->databits + s->stopbits;
-        DEBUG_SERIAL_LINE_DECODER && fprintf(stderr,"sld:all_bits = %f\n", all_bits);
-        if(startbit_start + s->samples_per_bits * all_bits >= input_size) { s->input_used += MAX_M(0,startbit_start-2); DEBUG_SERIAL_LINE_DECODER && fprintf(stderr,"sld:return_stopbit_too_far (+%d)\n", s->input_used); return; }
+        if (DEBUG_SERIAL_LINE_DECODER) fprintf(stderr,"sld:all_bits = %f\n", all_bits);
+        if(startbit_start + s->samples_per_bits * all_bits >= input_size) { s->input_used += MAX_M(0,startbit_start-2); if (DEBUG_SERIAL_LINE_DECODER) fprintf(stderr,"sld:return_stopbit_too_far (+%d)\n", s->input_used); return; }
 
         //We do the actual sampling.
         int di; //databit counter
@@ -1691,26 +1660,26 @@ void serial_line_decoder_f_u8(serial_line_t* s, float* input, unsigned char* out
         {
             int databit_start = startbit_start + (1+di+(0.5*(1-s->bit_sampling_width_ratio))) * s->samples_per_bits;
             int databit_end   = startbit_start + (1+di+(0.5*(1+s->bit_sampling_width_ratio))) * s->samples_per_bits;
-            DEBUG_SERIAL_LINE_DECODER && fprintf(stderr,"sld:databit_start = %d (%d)\n", databit_start, iabs_samples_helper+databit_start);
-            DEBUG_SERIAL_LINE_DECODER && fprintf(stderr,"sld:databit_end   = %d (%d)\n", databit_end,   iabs_samples_helper+databit_end);
+            if (DEBUG_SERIAL_LINE_DECODER) fprintf(stderr,"sld:databit_start = %d (%d)\n", databit_start, iabs_samples_helper+databit_start);
+            if (DEBUG_SERIAL_LINE_DECODER) fprintf(stderr,"sld:databit_end   = %d (%d)\n", databit_end,   iabs_samples_helper+databit_end);
             float databit_acc = 0;
-            for(i=databit_start;i<databit_end;i++) { databit_acc += input[i]; /*DEBUG_SERIAL_LINE_DECODER && fprintf(stderr, "%f (%f) ", input[i], databit_acc);*/ }
-            //DEBUG_SERIAL_LINE_DECODER && fprintf(stderr,"\n");
-            DEBUG_SERIAL_LINE_DECODER && fprintf(stderr,"sld:databit_decision = %d\n", !!(databit_acc>0));
+            for(i=databit_start;i<databit_end;i++) { databit_acc += input[i]; /*if (DEBUG_SERIAL_LINE_DECODER) fprintf(stderr, "%f (%f) ", input[i], databit_acc);*/ }
+            //if (DEBUG_SERIAL_LINE_DECODER) fprintf(stderr,"\n");
+            if (DEBUG_SERIAL_LINE_DECODER) fprintf(stderr,"sld:databit_decision = %d\n", !!(databit_acc>0));
             shr=(shr<<1)|!!(databit_acc>0);
         }
-        DEBUG_SERIAL_LINE_DECODER && fprintf(stderr,"sld:shr = 0x%x, %d\n", shr, shr);
+        if (DEBUG_SERIAL_LINE_DECODER) fprintf(stderr,"sld:shr = 0x%x, %d\n", shr, shr);
 
         //We check if the stopbit is correct.
         int stopbit_start = startbit_start + (1+s->databits) * s->samples_per_bits + (s->stopbits * 0.5 * (1-s->bit_sampling_width_ratio)) * s->samples_per_bits;
         int stopbit_end   = startbit_start + (1+s->databits) * s->samples_per_bits + (s->stopbits * 0.5 * (1+s->bit_sampling_width_ratio)) * s->samples_per_bits;
-        DEBUG_SERIAL_LINE_DECODER && fprintf(stderr,"sld:stopbit_start = %d (%d)\n", stopbit_start, iabs_samples_helper+stopbit_start);
-        DEBUG_SERIAL_LINE_DECODER && fprintf(stderr,"sld:stopbit_end   = %d (%d)\n", stopbit_end,   iabs_samples_helper+stopbit_end);
+        if (DEBUG_SERIAL_LINE_DECODER) fprintf(stderr,"sld:stopbit_start = %d (%d)\n", stopbit_start, iabs_samples_helper+stopbit_start);
+        if (DEBUG_SERIAL_LINE_DECODER) fprintf(stderr,"sld:stopbit_end   = %d (%d)\n", stopbit_end,   iabs_samples_helper+stopbit_end);
         float stopbit_acc = 0;
-        for(i=stopbit_start;i<stopbit_end;i++) { stopbit_acc += input[i]; DEBUG_SERIAL_LINE_DECODER && fprintf(stderr, "%f (%f) ", input[i], stopbit_acc); }
-        DEBUG_SERIAL_LINE_DECODER && fprintf(stderr,"\n");
-        if(stopbit_acc<0) { s->input_used += MIN_M(startbit_start + 1, input_size); DEBUG_SERIAL_LINE_DECODER && fprintf(stderr,"sld:return_stopbit_faulty (+%d)\n", s->input_used); return; }
-        DEBUG_SERIAL_LINE_DECODER && fprintf(stderr,"sld:stopbit_found\n");
+        for(i=stopbit_start;i<stopbit_end;i++) { stopbit_acc += input[i]; if (DEBUG_SERIAL_LINE_DECODER) fprintf(stderr, "%f (%f) ", input[i], stopbit_acc); }
+        if (DEBUG_SERIAL_LINE_DECODER) fprintf(stderr,"\n");
+        if(stopbit_acc<0) { s->input_used += MIN_M(startbit_start + 1, input_size); if (DEBUG_SERIAL_LINE_DECODER) fprintf(stderr,"sld:return_stopbit_faulty (+%d)\n", s->input_used); return; }
+        if (DEBUG_SERIAL_LINE_DECODER) fprintf(stderr,"sld:stopbit_found\n");
 
         //we write the output sample
         if(s->databits <= 8) output[s->output_size] = shr;
@@ -1723,12 +1692,12 @@ void serial_line_decoder_f_u8(serial_line_t* s, float* input, unsigned char* out
         input += samples_used_up_now;
         input_size -= samples_used_up_now;
         iabs_samples_helper += samples_used_up_now;
-        if(!input_size) { DEBUG_SERIAL_LINE_DECODER && fprintf(stderr,"sld:return_no_more_input (+%d)\n", s->input_used); return; }
+        if(!input_size) { if (DEBUG_SERIAL_LINE_DECODER) fprintf(stderr,"sld:return_no_more_input (+%d)\n", s->input_used); return; }
     }
-    DEBUG_SERIAL_LINE_DECODER && fprintf(stderr, "sld: >> output_size = %d  (+%d)\n", s->output_size, s->input_used);
+    if (DEBUG_SERIAL_LINE_DECODER) fprintf(stderr, "sld: >> output_size = %d  (+%d)\n", s->output_size, s->input_used);
 }
 
-void generic_slicer_f_u8(float* input, unsigned char* output, int input_size, int n_symbols)
+void generic_slicer_f_u8(const float* input, unsigned char* output, int input_size, int n_symbols)
 {
     float symbol_distance = 2.0/(n_symbols-1);
     for(int i=0;i<input_size;i++) 
@@ -1764,24 +1733,23 @@ void generic_slicer_f_u8(float* input, unsigned char* output, int input_size, in
         }
 }
 
-void binary_slicer_f_u8(float* input, unsigned char* output, int input_size)
+void binary_slicer_f_u8(const float* input, unsigned char* output, int input_size)
 {
     for(int i=0;i<input_size;i++) output[i] = input[i] > 0;
 }
 
-void psk_modulator_u8_c(unsigned char* input, complexf* output, int input_size, int n_psk)
+void psk_modulator_u8_c(const unsigned char* input, float complex *output, int input_size, int n_psk)
 {
     //outputs one complex sample per input symbol
     float phase_increment = (2*M_PI)/n_psk;
     for(int i=0;i<input_size;i++)
     {
         float out_phase=phase_increment*input[i];
-        iof(output,i)=cos(out_phase);
-        qof(output,i)=sin(out_phase);
+        output[i]=cos(out_phase) + I*sin(out_phase);
     }
 }
 
-void duplicate_samples_ntimes_u8_u8(unsigned char* input, unsigned char* output, int input_size_bytes, int sample_size_bytes, int ntimes)
+void duplicate_samples_ntimes_u8_u8(const unsigned char* input, unsigned char* output, int input_size_bytes, int sample_size_bytes, int ntimes)
 {
     int l=0;
     for(int i=0;i<input_size_bytes;i+=sample_size_bytes)
@@ -1790,7 +1758,7 @@ void duplicate_samples_ntimes_u8_u8(unsigned char* input, unsigned char* output,
                 output[l++]=input[i+j];
 }
 
-complexf psk31_interpolate_sine_cc(complexf* input, complexf* output, int input_size, int interpolation, complexf last_input)
+float complex psk31_interpolate_sine_cc(const float complex *input, float complex *output, int input_size, int interpolation, float complex last_input)
 {
     int oi=0; //output index
     for(int i=0;i<input_size;i++)
@@ -1798,16 +1766,15 @@ complexf psk31_interpolate_sine_cc(complexf* input, complexf* output, int input_
         for(int j=0; j<interpolation; j++)
         {
             float rate = (1+sin(-(M_PI/2)+M_PI*((j+1)/(float)interpolation)))/2;
-            iof(output,oi)=iof(input,i) * rate + iof(&last_input,0) * (1-rate);
-            qof(output,oi)=qof(input,i) * rate + qof(&last_input,0) * (1-rate);
-            oi++;
+            output[oi++] = creal(input[i]) * rate + creal(last_input) * (1-rate) +
+            		 I*(cimag(input[i]) * rate + cimag(last_input) * (1-rate));
         }
         last_input = input[i];
     }
     return last_input;
 }
 
-void pack_bits_1to8_u8_u8(unsigned char* input, unsigned char* output, int input_size)
+void pack_bits_1to8_u8_u8(const unsigned char* input, unsigned char* output, int input_size)
 { //output size should be input_size × 8
     for(int i=0; i<input_size; i++)
         for(int bi=0; bi<8; bi++) //bi: bit index
@@ -1815,9 +1782,9 @@ void pack_bits_1to8_u8_u8(unsigned char* input, unsigned char* output, int input
 }
 
 
-unsigned char pack_bits_8to1_u8_u8(unsigned char* input)
+unsigned char pack_bits_8to1_u8_u8(const unsigned char *input)
 {
-    unsigned char output;
+    unsigned char output=0;
     for(int i=0;i<8;i++)
     {
         output<<=1;
@@ -1825,7 +1792,7 @@ unsigned char pack_bits_8to1_u8_u8(unsigned char* input)
     }
     return output;
 }
-unsigned char differential_codec(unsigned char* input, unsigned char* output, int input_size, int encode, unsigned char state)
+unsigned char differential_codec(const unsigned char *input, unsigned char* output, int input_size, int encode, unsigned char state)
 {
     if(!encode)
         for(int i=0;i<input_size;i++) 
@@ -1870,24 +1837,21 @@ void pll_cc_init_p_controller(pll_t* p, float alpha)
     p->dphase=p->output_phase=0;
 }
 
-
-void pll_cc(pll_t* p, complexf* input, float* output_dphase, complexf* output_nco, int input_size)
+void pll_cc(pll_t* p, const float complex *input, float* output_dphase, float complex *output_nco, int input_size)
 {
     for(int i=0;i<input_size;i++)
     {
         p->output_phase += p->dphase;
-        while(p->output_phase>PI) p->output_phase-=2*PI;
-        while(p->output_phase<-PI) p->output_phase+=2*PI;
-        complexf current_nco;
-        iof(&current_nco,0) = sin(p->output_phase);
-        qof(&current_nco,0) = cos(p->output_phase);
+        while(p->output_phase>M_PI) p->output_phase-=2*M_PI;
+        while(p->output_phase<-M_PI) p->output_phase+=2*M_PI;
+        float complex current_nco = cos(p->output_phase) + I*sin(p->output_phase);
         if(output_nco) output_nco[i] = current_nco; //we don't output anything if it is a NULL pointer
 
         //accurate phase detector: calculating error from phase offset
-        float input_phase = atan2(iof(input,i),qof(input,i));
+        float input_phase = cargf(input[i]);
         float new_dphase = input_phase - p->output_phase;
-        while(new_dphase>PI) new_dphase-=2*PI;
-        while(new_dphase<-PI) new_dphase+=2*PI;
+        while(new_dphase>M_PI) new_dphase-=2*M_PI;
+        while(new_dphase<-M_PI) new_dphase+=2*M_PI;
 
         //modeling analog phase detector, which would be abs(input[i] * current_nco) if we had a real output signal, but what if we have complex signals?
         //qof(&current_nco,0)=-qof(&current_nco,0); //calculate conjugate
@@ -1901,8 +1865,8 @@ void pll_cc(pll_t* p, complexf* input, float* output_dphase, complexf* output_nc
             p->dphase = new_dphase * p->alpha + p->iir_temp;
             p->iir_temp += new_dphase * p->beta;
 
-            while(p->dphase>PI) p->dphase-=2*PI; //won't need this one
-            while(p->dphase<-PI) p->dphase+=2*PI;
+            while(p->dphase>M_PI) p->dphase-=2*M_PI; //won't need this one
+            while(p->dphase<-M_PI) p->dphase+=2*M_PI;
         }
         else if(p->pll_type == PLL_P_CONTROLLER)
         {
@@ -1914,7 +1878,7 @@ void pll_cc(pll_t* p, complexf* input, float* output_dphase, complexf* output_nc
     }
 }
 
-void octave_plot_point_on_cplxsig(complexf* signal, int signal_size, float error, int index, int correction_offset, char* writefiles_path, int points_size, ...)
+void octave_plot_point_on_cplxsig(const float complex *signal, int signal_size, float error, int index, int correction_offset, char* writefiles_path, int points_size, ...)
 {
     static int figure_output_counter = 0;
     int* points_z = (int*)malloc(sizeof(int)*points_size);
@@ -1928,26 +1892,26 @@ void octave_plot_point_on_cplxsig(complexf* signal, int signal_size, float error
     }
     if(writefiles_path && !figure_output_counter) fprintf(stderr, "cf=figure();\n");
     fprintf(stderr, "N = %d;\nisig = [", signal_size);
-    for(int i=0;i<signal_size;i++) fprintf(stderr, "%f ", iof(signal,i));
+    for(int i=0;i<signal_size;i++) fprintf(stderr, "%f ", creal(signal[i]));
     fprintf(stderr, "];\nqsig = [");
-    for(int i=0;i<signal_size;i++) fprintf(stderr, "%f ", qof(signal,i));
+    for(int i=0;i<signal_size;i++) fprintf(stderr, "%f ", cimag(signal[i]));
     fprintf(stderr, "];\nzsig = [0:N-1];\nsubplot(2,2,[2 4]);\nplot3(isig,zsig,qsig,\"b-\",");
     for(int i=0;i<points_size;i++)
         fprintf(stderr, "[%f],[%d],[%f],\"%c.\"%c", 
-            iof(signal, points_z[i]), points_z[i], qof(signal, points_z[i]), 
+            creal(signal[points_z[i]]), points_z[i], cimag(signal[points_z[i]]), 
             (char)points_color[i]&0xff, (i<points_size-1)?',':' '
         );
     va_end(vl);
     fprintf(stderr, ");\ntitle(\"index = %d, error = %f, cxoffs = %d\");\nsubplot(2,2,1);\nplot(zsig, isig,\"b-\",", index, error, correction_offset);
     for(int i=0;i<points_size;i++)
         fprintf(stderr, "[%d],[%f],\"%c.\"%c", 
-            points_z[i], iof(signal, points_z[i]),
+            points_z[i], creal(signal[points_z[i]]),
             (char)points_color[i]&0xff, (i<points_size-1)?',':' '
         );
     fprintf(stderr, ");\nsubplot(2,2,3);\nplot(zsig, qsig,\"b-\",");
     for(int i=0;i<points_size;i++)
         fprintf(stderr, "[%d],[%f],\"%c.\"%c", 
-            points_z[i], qof(signal, points_z[i]),
+            points_z[i], cimag(signal[points_z[i]]),
             (char)points_color[i]&0xff, (i<points_size-1)?',':' '
         );
     fprintf(stderr, ");\n");
@@ -1974,7 +1938,7 @@ timing_recovery_state_t timing_recovery_init(timing_recovery_algorithm_t algorit
 
 #define MTIMINGR_HDEBUG 0
 
-void timing_recovery_cc(complexf* input, complexf* output, int input_size, float* timing_error, int* sampled_indexes, timing_recovery_state_t* state)
+void timing_recovery_cc(const float complex *input, float complex *output, int input_size, float* timing_error, int* sampled_indexes, timing_recovery_state_t* state)
 {
     //We always assume that the input starts at center of the first symbol cross before the first symbol.
     //Last time we consumed that much from the input samples that it is there.
@@ -2025,10 +1989,10 @@ void timing_recovery_cc(complexf* input, complexf* output, int input_size, float
             }
             else break;
 
-            error = ( iof(input, el_point_right_index) - iof(input, el_point_left_index) ) * iof(input, el_point_mid_index); 
+            error = ( creal(input[el_point_right_index]) - creal(input[el_point_left_index]) ) * creal(input[el_point_mid_index]); 
             if(state->use_q)
             {
-                error += ( qof(input, el_point_right_index) - qof(input, el_point_left_index)) * qof(input, el_point_mid_index); 
+                error += ( cimag(input[el_point_right_index]) - cimag(input[el_point_left_index])) * cimag(input[el_point_mid_index]); 
                 error /= 2;
             }
             //Original correction method: this version can only move a single sample in any direction
@@ -2095,7 +2059,7 @@ void init_bpsk_costas_loop_cc(bpsk_costas_loop_state_t* s, int decision_directed
 {
     //fprintf(stderr, "init_bpsk_costas_loop_cc: bandwidth = %f, damping_factor = %f\n", bandwidth, damping_factor);
     //based on: http://gnuradio.squarespace.com/blog/2011/8/13/control-loop-gain-values.html
-    float bandwidth_omega = 2*PI*bandwidth; //so that the bandwidth should be around 0.01 by default (2pi/100), and the damping_factor should be default 0.707
+    float bandwidth_omega = 2*M_PI*bandwidth; //so that the bandwidth should be around 0.01 by default (2pi/100), and the damping_factor should be default 0.707
     float denomiator = 1+2*damping_factor*bandwidth_omega+bandwidth_omega*bandwidth_omega;
     fprintf(stderr, "damp = %f, bw = %f, bwomega = %f\n", damping_factor, bandwidth, bandwidth_omega);
     s->alpha = (4*damping_factor*bandwidth_omega)/denomiator;
@@ -2105,27 +2069,27 @@ void init_bpsk_costas_loop_cc(bpsk_costas_loop_state_t* s, int decision_directed
     s->dphase_max_reset_to_zero=0;
 }
 
-void bpsk_costas_loop_cc(complexf* input, complexf* output, int input_size, float* output_error, float* output_dphase, complexf* output_nco, bpsk_costas_loop_state_t* s)
+void bpsk_costas_loop_cc(const float complex *input, float complex *output, int input_size, float* output_error, float* output_dphase, float complex *output_nco, bpsk_costas_loop_state_t* s)
 {
     for(int i=0;i<input_size;i++)
     {
-        complexf nco_sample;
-        e_powj(&nco_sample, s->nco_phase);
-        cmult(&output[i], &input[i], &nco_sample);
+        float complex nco_sample;
+        nco_sample = cos(s->nco_phase) + I*sin(s->nco_phase);
+        output[i] = input[i] * nco_sample;
         if(output_nco) output_nco[i]=nco_sample;
         float error = 0;
         if(s->decision_directed)
         {
-            float output_phase = atan2(qof(output,i),iof(output,i));
-            if (fabs(output_phase)<PI/2) 
+            float output_phase = cargf(output[i]);
+            if (fabs(output_phase)<M_PI/2) 
                 error = -output_phase;
             else
             {
-                error = PI-output_phase;
-                while(error>PI) error -= 2*PI;
+                error = M_PI-output_phase;
+                while(error>M_PI) error -= 2*M_PI;
             }
         }
-        else error = PI*iof(output,i)*qof(output,i);
+        else error = M_PI*creal(output[i])*cimag(output[i]);
         if(output_error) output_error[i]=error;
         s->current_freq += error * s->beta;
         s->dphase = error * s->alpha + s->current_freq;
@@ -2136,8 +2100,8 @@ void bpsk_costas_loop_cc(complexf* input, complexf* output, int input_size, floa
 
         //step NCO
         s->nco_phase += s->dphase;
-        while(s->nco_phase>2*PI) s->nco_phase-=2*PI;
-        while(s->nco_phase<=0) s->nco_phase+=2*PI;
+        while(s->nco_phase>2*M_PI) s->nco_phase-=2*M_PI;
+        while(s->nco_phase<=0) s->nco_phase+=2*M_PI;
     }
 }
 
@@ -2163,7 +2127,7 @@ bpsk_costas_loop_state_t init_bpsk_costas_loop_cc(float samples_per_bits)
     return state;
 }
 
-void bpsk_costas_loop_c1mc(complexf* input, complexf* output, int input_size, bpsk_costas_loop_state_t* state)
+void bpsk_costas_loop_c1mc(const float complex *input, float complex *output, int input_size, bpsk_costas_loop_state_t* state)
 {
     int debug = 0;
     if(debug) fprintf(stderr, "costas:\n");
@@ -2172,10 +2136,10 @@ void bpsk_costas_loop_c1mc(complexf* input, complexf* output, int input_size, bp
         float input_phase = atan2(input[i].q, input[i].i);
         float input_and_vco_mixed_phase = input_phase - state->vco_phase;
         if(debug) fprintf(stderr, "%g | %g\n", input_and_vco_mixed_phase, input_phase), debug--;
-        complexf input_and_vco_mixed_sample; 
+        float complex input_and_vco_mixed_sample; 
         e_powj(&input_and_vco_mixed_sample, input_and_vco_mixed_phase);
         
-        complexf vco_sample;
+        float complex vco_sample;
         e_powj(&vco_sample, -state->vco_phase);
         //cmult(&input_and_vco_mixed_sample, &input[i], &vco_sample);//if this is enabled, the real input sample is used, not the amplitude normalized 
 
@@ -2191,45 +2155,42 @@ void bpsk_costas_loop_c1mc(complexf* input, complexf* output, int input_size, bp
         //vco_phase_addition = vco_phase_addition * state->rc_filter_alpha + state->last_vco_phase_addition * (1-state->rc_filter_alpha);
         //state->last_vco_phase_addition = vco_phase_addition;
         state->vco_phase += vco_phase_addition;
-        while(state->vco_phase>PI) state->vco_phase-=2*PI;
-        while(state->vco_phase<-PI) state->vco_phase+=2*PI;
+        while(state->vco_phase>PI) state->vco_phase-=2*M_PI;
+        while(state->vco_phase<-PI) state->vco_phase+=2*M_PI;
         cmult(&output[i], &input[i], &vco_sample);
     }
 }
 #endif
 
-void simple_agc_cc(complexf* input, complexf* output, int input_size, float rate, float reference, float max_gain, float* current_gain)
+void simple_agc_cc(const float complex *input, float complex *output, int input_size, float rate, float reference, float max_gain, float* current_gain)
 {
     float rate_1minus=1-rate;
-    int debugn = 0;
     for(int i=0;i<input_size;i++)
     {
-        float amplitude = sqrt(input[i].i*input[i].i+input[i].q*input[i].q);
+        float amplitude = sqrt(creal(input[i])*creal(input[i]) + cimag(input[i])*cimag(input[i]));
         float ideal_gain = (reference/amplitude);
         if(ideal_gain>max_gain) ideal_gain = max_gain;
         if(ideal_gain<=0) ideal_gain = 0;
         //*current_gain += (ideal_gain-(*current_gain))*rate;
         *current_gain = (ideal_gain-(*current_gain))*rate + (*current_gain)*rate_1minus;
         //if(debugn<100) fprintf(stderr, "cgain: %g\n", *current_gain), debugn++;
-        output[i].i=(*current_gain)*input[i].i;
-        output[i].q=(*current_gain)*input[i].q;
+        output[i]=(*current_gain)*input[i];
     }
 }
 
-void firdes_add_peak_c(complexf* output, int length, float rate, window_t window, int add, int normalize)
+void firdes_add_peak_c(float complex *output, int length, float rate, window_t window, int add, int normalize)
 {
     //add=0: malloc output previously
     //add=1: calloc output previously
-    complexf* taps = (complexf*)malloc(sizeof(complexf)*length);
+    float complex *taps = (float complex *)malloc(sizeof(float complex)*length);
     int middle=length/2;
     float phase = 0, phase_addition = -rate*M_PI*2;
     float (*window_function)(float) = firdes_get_window_kernel(window);
     for(int i=0; i<length; i++) //@@firdes_add_peak_c: calculate taps
     {
-        e_powj(&taps[i], phase);
+        taps[i] = cos(phase) + I*sin(phase);
         float window_multiplier = window_function(fabs((float)(middle-i)/middle));
-        taps[i].i *= window_multiplier;
-        taps[i].q *= window_multiplier;
+        taps[i] *= window_multiplier;
         phase += phase_addition;
         while(phase>2*M_PI) phase-=2*M_PI;
         while(phase<0) phase+=2*M_PI;
@@ -2239,8 +2200,7 @@ void firdes_add_peak_c(complexf* output, int length, float rate, window_t window
     if(add) 
         for(int i=0;i<length;i++)
         {
-            output[i].i += taps[i].i;
-            output[i].q += taps[i].q;
+            output[i] += taps[i];
         }
     else for(int i=0;i<length;i++) output[i] = taps[i];
     if(normalize)
@@ -2248,49 +2208,46 @@ void firdes_add_peak_c(complexf* output, int length, float rate, window_t window
         float sum=0;
         for(int i=0;i<length;i++) //@firdes_add_peak_c: normalize pass 1
         {
-            sum+=sqrt(output[i].i*output[i].i + output[i].q*output[i].q);
+            sum+=sqrt(creal(output[i])*creal(output[i]) + cimag(output[i])*cimag(output[i]));
         }
         for(int i=0;i<length;i++) //@firdes_add_peak_c: normalize pass 2
         {
-            output[i].i/=sum;
-            output[i].q/=sum;
+            output[i]/=sum;
         }
     }
 }
 
-int apply_fir_cc(complexf* input, complexf* output, int input_size, complexf* taps, int taps_length)
+int apply_fir_cc(const float complex *input, float complex *output, int input_size, float complex *taps, int taps_length)
 {
     int i;
     for(i=0; i<input_size-taps_length+1; i++)
     {
-        csetnull(&output[i]);
+        output[i] = 0;
         for(int ti=0;ti<taps_length;ti++)
         {
-            cmultadd(&output[i], &input[i+ti], &taps[ti]);
+            output[i] += input[i+ti] * taps[ti];
         }
     }
     return i;
 }
 
 
-int apply_real_fir_cc(complexf* input, complexf* output, int input_size, float* taps, int taps_length)
+int apply_real_fir_cc(const float complex *input, float complex *output, int input_size, float* taps, int taps_length)
 {
     int i;
     for(i=0; i<input_size-taps_length+1; i++)
     {
-        float acci = 0, accq = 0;
+        float acc = 0;
         for(int ti=0;ti<taps_length;ti++)
         {
-            acci += iof(input,i+ti)*taps[ti];
-            accq += qof(input,i+ti)*taps[ti];
+            acc += input[i+ti]*taps[ti];
         }
-        iof(output,i)=acci;
-        qof(output,i)=accq;
+        output[i] = acc;
     }
     return i;
 }
 
-float normalized_timing_variance_u32_f(unsigned* input, float* temp, int input_size, int samples_per_symbol, int initial_sample_offset, int debug_print)
+float normalized_timing_variance_u32_f(const unsigned* input, float* temp, int input_size, int samples_per_symbol, int initial_sample_offset, int debug_print)
 {
     float *ndiff_rad = temp;
     float ndiff_rad_mean = 0;
@@ -2304,7 +2261,7 @@ float normalized_timing_variance_u32_f(unsigned* input, float* temp, int input_s
         int sodiff = abs(socorrect-input[i]);
         float ndiff = (float)sodiff/samples_per_symbol;
 
-        ndiff_rad[i] = ndiff*PI;
+        ndiff_rad[i] = ndiff*M_PI;
         ndiff_rad_mean = ndiff_rad_mean*(((float)i)/(i+1))+(ndiff_rad[i]/(i+1));
         if(debug_print) fprintf(stderr, "input[%d] = %u, sinearest = %u, socorrect = %u, sodiff = %u, ndiff = %f, ndiff_rad[i] = %f, ndiff_rad_mean = %f\n", i, input[i], sinearest, socorrect, sodiff, ndiff, ndiff_rad[i], ndiff_rad_mean);
     }
@@ -2316,36 +2273,37 @@ float normalized_timing_variance_u32_f(unsigned* input, float* temp, int input_s
     return result;
 }
 
-void dbpsk_decoder_c_u8(complexf* input, unsigned char* output, int input_size)
+void dbpsk_decoder_c_u8(const float complex *input, unsigned char* output, int input_size)
 {
-    static complexf last_input;
+    static float complex last_input;
     for(int i=0;i<input_size;i++)
     {
-        float phase = atan2(qof(input,i), iof(input,i));
-        float last_phase = atan2(qofv(last_input), iofv(last_input));
+        float phase = cargf(input[i]);
+        float last_phase = cargf(last_input);
         float dphase = phase-last_phase;
-        while(dphase<-PI) dphase+=2*PI;
-        while(dphase>=PI) dphase-=2*PI;
-        if( (dphase>(PI/2)) || (dphase<(-PI/2)) ) output[i]=0;
+        while(dphase<-M_PI) dphase+=2*M_PI;
+        while(dphase>=M_PI) dphase-=2*M_PI;
+        if( (dphase>(M_PI/2)) || (dphase<(-M_PI/2)) ) output[i]=0;
         else output[i]=1;
         last_input = input[i];
     }
 }
 
-int bfsk_demod_cf(complexf* input, float* output, int input_size, complexf* mark_filter, complexf* space_filter, int taps_length)
+int bfsk_demod_cf(const float complex *input, float* output, int input_size, float complex *mark_filter, float complex *space_filter, int taps_length)
 {
-    complexf acc_space, acc_mark;
+    float complex acc_space, acc_mark;
     for(int i=0; i<input_size-taps_length+1; i++)
     {
-        csetnull(&acc_space);
-        csetnull(&acc_mark);
+        acc_space = 0;
+        acc_mark = 0;
         for(int ti=0;ti<taps_length;ti++)
         {
-            cmultadd(&acc_space, &input[i+ti], &space_filter[ti]);
-            cmultadd(&acc_mark,  &input[i+ti], &mark_filter[ti]);
+            acc_space += input[i+ti] * space_filter[ti];
+            acc_mark  += input[i+ti] * mark_filter[ti];
         }
-        output[i] = - ( iofv(acc_space)*iofv(acc_space)+qofv(acc_space)*qofv(acc_space) ) +
-            ( iofv(acc_mark)*iofv(acc_mark)+qofv(acc_mark)*qofv(acc_mark) );
+
+        output[i] = - ( creal(acc_space)*creal(acc_space) + cimag(acc_space)*cimag(acc_space) ) +
+            ( creal(acc_mark)*creal(acc_mark) + cimag(acc_mark)*cimag(acc_mark) );
     }
     return input_size-taps_length+1;
 }
@@ -2360,47 +2318,42 @@ int bfsk_demod_cf(complexf* input, float* output, int input_size, complexf* mark
 
 */
 
-void convert_u8_f(unsigned char* input, float* output, int input_size)
+void convert_u8_f(const unsigned char* input, float* output, int input_size)
 {
     for(int i=0;i<input_size;i++) output[i]=((float)input[i])/(UCHAR_MAX/2.0)-1.0; //@convert_u8_f
 }
 
-void convert_s8_f(signed char* input, float* output, int input_size)
+void convert_s8_f(const signed char* input, float* output, int input_size)
 {
-    for(int i=0;i<input_size;i++) output[i]=((float)input[i])/SCHAR_MAX; //@convert_s8_f
+    for(int i=0;i<input_size;i++) output[i]=(float)input[i]/SCHAR_MAX; //@convert_s8_f
 }
 
-void convert_s16_f(short* input, float* output, int input_size)
+void convert_s16_f(const short* input, float* output, int input_size)
 {
     for(int i=0;i<input_size;i++) output[i]=(float)input[i]/SHRT_MAX; //@convert_s16_f
 }
 
-void convert_f_u8(float* input, unsigned char* output, int input_size)
+void convert_f_u8(const float* input, unsigned char* output, int input_size)
 {
     for(int i=0;i<input_size;i++) output[i]=input[i]*UCHAR_MAX*0.5+128; //@convert_f_u8
     //128 above is the correct value to add. In any other case a DC component
     //of at least -60 dB is shown on the FFT plot after convert_f_u8 -> convert_u8_f
 }
 
-void convert_f_s8(float* input, signed char* output, int input_size)
+void convert_f_s8(const float* input, signed char* output, int input_size)
 {
     for(int i=0;i<input_size;i++) output[i]=input[i]*SCHAR_MAX; //@convert_f_s8
 }
 
-void convert_f_s16(float* input, short* output, int input_size)
+void convert_f_s16(const float* input, short* output, int input_size)
 {
-    /*for(int i=0;i<input_size;i++)
-    {
-        if(input[i]>1.0) input[i]=1.0;
-        if(input[i]<-1.0) input[i]=-1.0;
-    }*/
     for(int i=0;i<input_size;i++) output[i]=input[i]*SHRT_MAX; //@convert_f_s16
 }
 
-void convert_i16_f(short* input, float* output, int input_size) { convert_s16_f(input, output, input_size); }
-void convert_f_i16(float* input, short* output, int input_size) { convert_f_s16(input, output, input_size); }
+void convert_i16_f(const short* input, float* output, int input_size) { convert_s16_f(input, output, input_size); }
+void convert_f_i16(const float* input, short* output, int input_size) { convert_f_s16(input, output, input_size); }
 
-void convert_f_s24(float* input, unsigned char* output, int input_size, int bigendian)
+void convert_f_s24(const float* input, unsigned char* output, int input_size, int bigendian)
 {
     int k=0;
     if(bigendian) for(int i=0;i<input_size;i++)
@@ -2421,7 +2374,7 @@ void convert_f_s24(float* input, unsigned char* output, int input_size, int bige
     }
 }
 
-void convert_s24_f(unsigned char* input, float* output, int input_size, int bigendian)
+void convert_s24_f(const unsigned char* input, float* output, int input_size, int bigendian)
 {
     int k=0;
     if(bigendian) for(int i=0;i<input_size*3;i+=3)
@@ -2452,16 +2405,15 @@ void get_random_samples_f(float* output, int output_size, FILE* status)
     }
 }
 
-void get_random_gaussian_samples_c(complexf* output, int output_size, FILE* status)
+void get_random_gaussian_samples_c(float complex *output, int output_size, FILE* status)
 {
     int* pioutput = (int*)output;
-    fread((unsigned char*)output, sizeof(complexf), output_size, status);
+    fread((unsigned char*)output, sizeof(float complex), output_size, status);
     for(int i=0;i<output_size;i++)
     {
         float u1 = 0.5+0.49999999*(((float)pioutput[2*i])/(float)INT_MAX);
         float u2 = 0.5+0.49999999*(((float)pioutput[2*i+1])/(float)INT_MAX);
-        iof(output, i)=sqrt(-2*log(u1))*cos(2*PI*u2);
-        qof(output, i)=sqrt(-2*log(u1))*sin(2*PI*u2);
+        output[i] = sqrt(-2*log(u1))*cos(2*M_PI*u2) + I* sqrt(-2*log(u1))*sin(2*M_PI*u2);
     }
 }
 
@@ -2474,7 +2426,7 @@ int firdes_cosine_f(float* taps, int taps_length, int samples_per_symbol)
 {
     //needs a taps_length 2 × samples_per_symbol + 1
     int middle_i=taps_length/2;
-    for(int i=0;i<samples_per_symbol;i++) taps[middle_i+i]=taps[middle_i-i]=(1+cos(PI*i/(float)samples_per_symbol))/2;
+    for(int i=0;i<samples_per_symbol;i++) taps[middle_i+i]=taps[middle_i-i]=(1+cos(M_PI*i/(float)samples_per_symbol))/2;
     //for(int i=0;i<taps_length;i++) taps[i]=powf(taps[i],2);
     normalize_fir_f(taps, taps, taps_length);
 }
@@ -2483,56 +2435,54 @@ int firdes_rrc_f(float* taps, int taps_length, int samples_per_symbol, float bet
 {
     //needs an odd taps_length
     int middle_i=taps_length/2;
-    taps[middle_i]=(1/(float)samples_per_symbol)*(1+beta*(4/PI-1));
+    taps[middle_i]=(1/(float)samples_per_symbol)*(1+beta*(4/M_PI-1));
     for(int i=1;i<1+taps_length/2;i++) 
     {
         if(i==samples_per_symbol/(4*beta)) 
-            taps[middle_i+i]=taps[middle_i-i]=(beta/(samples_per_symbol*sqrt(2)))*((1+(2/PI))*sin(PI/(4*beta))+(1-(2/PI))*cos(PI/(4*beta)));
+            taps[middle_i+i]=taps[middle_i-i]=(beta/(samples_per_symbol*sqrt(2)))*((1+(2/M_PI))*sin(M_PI/(4*beta))+(1-(2/M_PI))*cos(M_PI/(4*beta)));
         else
             taps[middle_i+i]=taps[middle_i-i]=(1/(float)samples_per_symbol)*
-                (sin(PI*(i/(float)samples_per_symbol)*(1-beta)) + 4*beta*(i/(float)samples_per_symbol)*cos(PI*(i/(float)samples_per_symbol)*(1+beta)))/
-                (PI*(i/(float)samples_per_symbol)*(1-powf(4*beta*(i/(float)samples_per_symbol),2)));
+                (sin(M_PI*(i/(float)samples_per_symbol)*(1-beta)) + 4*beta*(i/(float)samples_per_symbol)*cos(M_PI*(i/(float)samples_per_symbol)*(1+beta)))/
+                (M_PI*(i/(float)samples_per_symbol)*(1-powf(4*beta*(i/(float)samples_per_symbol),2)));
     }
     normalize_fir_f(taps, taps, taps_length);
 }
 
-void plain_interpolate_cc(complexf* input, complexf* output, int input_size, int interpolation)
+void plain_interpolate_cc(const float complex *input, float complex *output, int input_size, int interpolation)
 {
     for(int i=0;i<input_size;i++)
     {
         output[i*interpolation]=input[i];
-        bzero(output+(interpolation*i)+1, (interpolation-1)*sizeof(complexf));
+        bzero(output+(interpolation*i)+1, (interpolation-1)*sizeof(float complex));
     }
 }
 
 #define MMATCHEDFILT_GAS(NAME) \
     if(!strcmp( #NAME , input )) return MATCHED_FILTER_ ## NAME;
 
-matched_filter_type_t matched_filter_get_type_from_string(char* input)
+matched_filter_type_t matched_filter_get_type_from_string(const char *input)
 {
     MMATCHEDFILT_GAS(RRC);
     MMATCHEDFILT_GAS(COSINE);
     return MATCHED_FILTER_DEFAULT;
 }
 
-float* add_ff(float* input1, float* input2, float* output, int input_size)
+float *add_ff(const float *input1, const float *input2, float *output, int input_size)
 {
     for(int i=0;i<input_size;i++) output[i]=input1[i]+input2[i];
 }
 
-float* add_const_cc(complexf* input, complexf* output, int input_size, complexf x)
+float* add_const_cc(const float complex *input, float complex *output, int input_size, float complex x)
 {
     for(int i=0;i<input_size;i++)
     {
-        iof(output,i)=iof(input,i)+iofv(x);
-        qof(output,i)=iof(input,i)+qofv(x);
+        output[i]=input[i]+x;
     }
 }
 
-int trivial_vectorize()
+int trivial_vectorize(int *a, int *b, int *c)
 {
     //this function is trivial to vectorize and should pass on both NEON and SSE
-    int a[1024], b[1024], c[1024];
     for(int i=0; i<1024; i++) //@trivial_vectorize: should pass :-)
     {
         c[i]=a[i]*b[i];

@@ -29,7 +29,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
  
 #define _POSIX_C_SOURCE 199309L
-#define _BSD_SOURCE
+#define _DEFAULT_SOURCE
 #define _GNU_SOURCE
 #include <stdio.h>
 #include <stdlib.h>
@@ -43,14 +43,12 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <unistd.h>
 #include <time.h>
 #include <stdarg.h>
-#include "libcsdr.h"
-#include "libcsdr_gpl.h"
-#include "ima_adpcm.h"
+#include "libcsdr/libcsdr_all.h"
+//#include "ima_adpcm.h"
 #include <sched.h>
 #include <math.h>
 #include <strings.h>
 #include <errno.h>
-#include "fastddc.h"
 #include <assert.h>
 
 char usage[]=
@@ -159,8 +157,8 @@ char usage[]=
 "    dbpsk_decoder_c_u8\n" 
 "    bfsk_demod_cf <spacing> <filter_length>\n"
 "    normalized_timing_variance_u32_f <samples_per_symbol> <initial_sample_offset> [--debug]\n"
-"    ?<search_the_function_list>\n"
-"    ??<jump_to_function_docs_on_github>\n"
+"    <search_the_function_list>\n"
+"    <jump_to_function_docs_on_github>\n"
 "    =<evaluate_python_expression>\n"
 "    \n"
 ;
@@ -226,13 +224,13 @@ int clone_(int bufsize_param)
 
 #define FREAD_U8    fread (input_buffer,    sizeof(unsigned char), the_bufsize, stdin)
 #define FWRITE_U8   fwrite (output_buffer,  sizeof(unsigned char), the_bufsize, stdout)
-#define FREAD_R     fread (input_buffer,    sizeof(float),      the_bufsize, stdin)
-#define FREAD_C     fread (input_buffer,    sizeof(float)*2,    the_bufsize, stdin)
-#define FWRITE_R    fwrite (output_buffer,  sizeof(float),      the_bufsize, stdout)
-#define FWRITE_C    fwrite (output_buffer,  sizeof(float)*2,    the_bufsize, stdout)
+#define FREAD_R     fread (input_buffer,    sizeof(float),         the_bufsize, stdin)
+#define FREAD_C     fread (input_buffer,    sizeof(float complex), the_bufsize, stdin)
+#define FWRITE_R    fwrite (output_buffer,  sizeof(float),         the_bufsize, stdout)
+#define FWRITE_C    fwrite (output_buffer,  sizeof(float complex), the_bufsize, stdout)
 #define FEOF_CHECK  if(feof(stdin)) return 0
-//#define BIG_FREAD_C fread(input_buffer, sizeof(float)*2, BIG_BUFSIZE, stdin)
-//#define BIG_FWRITE_C fwrite(output_buffer, sizeof(float)*2, BIG_BUFSIZE, stdout)
+//#define BIG_FREAD_C fread(input_buffer, sizeof(float complex), BIG_BUFSIZE, stdin)
+//#define BIG_FWRITE_C fwrite(output_buffer, sizeof(float complex), BIG_BUFSIZE, stdout)
 
 int init_fifo(int argc, char *argv[])
 {
@@ -623,7 +621,7 @@ int main(int argc, char *argv[])
         {
             FEOF_CHECK;
             FREAD_C;
-            for(int i=0;i<the_bufsize;i++) output_buffer[i]=iof(input_buffer,i);
+            for(int i=0;i<the_bufsize;i++) output_buffer[i]=creal(input_buffer[i]);
             FWRITE_R;
             TRY_YIELD;
         }
@@ -696,7 +694,7 @@ int main(int argc, char *argv[])
         {
             FEOF_CHECK;
             if(!FREAD_C) break;
-            starting_phase=shift_math_cc((complexf*)input_buffer, (complexf*)output_buffer, the_bufsize, rate, starting_phase);
+            starting_phase=shift_math_cc((float complex*)input_buffer, (float complex*)output_buffer, the_bufsize, rate, starting_phase);
             FWRITE_C;
             TRY_YIELD;
         }
@@ -724,7 +722,7 @@ int main(int argc, char *argv[])
         {
             FEOF_CHECK;
             if(!FREAD_C) break;
-            starting_phase=shift_table_cc((complexf*)input_buffer, (complexf*)output_buffer, the_bufsize, rate, table_data, starting_phase);
+            starting_phase=shift_table_cc((float complex*)input_buffer, (float complex*)output_buffer, the_bufsize, rate, table_data, starting_phase);
             FWRITE_C;
             TRY_YIELD;
         }
@@ -739,7 +737,7 @@ int main(int argc, char *argv[])
         float rate;
 
         int fd;
-        if(fd=init_fifo(argc,argv))
+        if ((fd=init_fifo(argc,argv)))
         {
             while(!read_fifo_ctl(fd,"%g\n",&rate)) usleep(10000);
         }
@@ -768,7 +766,7 @@ int main(int argc, char *argv[])
                 while(remain)
                 {
                     current_size=(remain>1024)?1024:remain;
-                    starting_phase=shift_addfast_cc((complexf*)ibufptr, (complexf*)obufptr, current_size, &data, starting_phase);
+                    starting_phase=shift_addfast_cc((float complex*)ibufptr, (float complex*)obufptr, current_size, &data, starting_phase);
                     ibufptr+=current_size*2;
                     obufptr+=current_size*2;
                     remain-=current_size;
@@ -790,7 +788,7 @@ int main(int argc, char *argv[])
         float rate;
 
         int fd;
-        if(fd=init_fifo(argc,argv))
+        if ((fd=init_fifo(argc,argv)))
         {
             while(!read_fifo_ctl(fd,"%g\n",&rate)) usleep(10000);
         }
@@ -819,7 +817,7 @@ int main(int argc, char *argv[])
                 while(remain)
                 {
                     current_size=(remain>1024)?1024:remain;
-                    starting_phase=shift_unroll_cc((complexf*)ibufptr, (complexf*)obufptr, current_size, &data, starting_phase);
+                    starting_phase=shift_unroll_cc((float complex*)ibufptr, (float complex*)obufptr, current_size, &data, starting_phase);
                     ibufptr+=current_size*2;
                     obufptr+=current_size*2;
                     remain-=current_size;
@@ -837,7 +835,6 @@ int main(int argc, char *argv[])
     {
         bigbufs=1;
         if(argc<=2) return badsyntax("need required parameter (rate)");
-        float starting_phase=0;
         float rate;
         int decimation=1;
         sscanf(argv[2],"%g",&rate);
@@ -852,7 +849,7 @@ int main(int argc, char *argv[])
         {
             FEOF_CHECK;
             if(!FREAD_C) break;
-            s=decimating_shift_addition_cc((complexf*)input_buffer, (complexf*)output_buffer, the_bufsize, d, decimation, s);
+            s=decimating_shift_addition_cc((float complex*)input_buffer, (float complex*)output_buffer, the_bufsize, d, decimation, s);
             fwrite(output_buffer, sizeof(float)*2, s.output_size, stdout);
             TRY_YIELD;
         }
@@ -867,7 +864,7 @@ int main(int argc, char *argv[])
         float rate;
 
         int fd;
-        if(fd=init_fifo(argc,argv))
+        if ((fd=init_fifo(argc,argv)))
         {
             while(!read_fifo_ctl(fd,"%g\n",&rate)) usleep(10000);
         }
@@ -896,7 +893,7 @@ int main(int argc, char *argv[])
                 while(remain)
                 {
                     current_size=(remain>1024)?1024:remain;
-                    starting_phase=shift_addition_cc((complexf*)ibufptr, (complexf*)obufptr, current_size, data, starting_phase);
+                    starting_phase=shift_addition_cc((float complex*)ibufptr, (float complex*)obufptr, current_size, data, starting_phase);
                     ibufptr+=current_size*2;
                     obufptr+=current_size*2;
                     remain-=current_size;
@@ -961,7 +958,7 @@ int main(int argc, char *argv[])
             FEOF_CHECK;
             FREAD_C;
             if(feof(stdin)) return 0;
-            last_phase=fmdemod_atan_cf((complexf*)input_buffer, output_buffer, the_bufsize, last_phase);
+            last_phase=fmdemod_atan_cf((float complex*)input_buffer, output_buffer, the_bufsize, last_phase);
             FWRITE_R;
             TRY_YIELD;
         }
@@ -969,14 +966,13 @@ int main(int argc, char *argv[])
     if(!strcmp(argv[1],"fmdemod_quadri_cf"))
     {
         if(!sendbufsize(initialize_buffers())) return -2;
-        complexf last_sample;
-        last_sample.i=0.;
-        last_sample.q=0.;
+        float complex last_sample;
+        last_sample=0.;
         for(;;)
         {
             FEOF_CHECK;
             FREAD_C;
-            last_sample=fmdemod_quadri_cf((complexf*)input_buffer, output_buffer, the_bufsize, temp_f, last_sample);
+            last_sample=fmdemod_quadri_cf((float complex*)input_buffer, output_buffer, the_bufsize, temp_f, last_sample);
             FWRITE_R;
             TRY_YIELD;
         }
@@ -984,14 +980,13 @@ int main(int argc, char *argv[])
     if(!strcmp(argv[1],"fmdemod_quadri_novect_cf"))
     {
         if(!sendbufsize(initialize_buffers())) return -2;
-        complexf last_sample;
-        last_sample.i=0.;
-        last_sample.q=0.;
+        float complex last_sample;
+        last_sample=0.;
         for(;;)
         {
             FEOF_CHECK;
             FREAD_C;
-            last_sample=fmdemod_quadri_novect_cf((complexf*)input_buffer, output_buffer, the_bufsize, last_sample);
+            last_sample=fmdemod_quadri_novect_cf((float complex*)input_buffer, output_buffer, the_bufsize, last_sample);
             FWRITE_R;
             TRY_YIELD;
         }
@@ -1078,7 +1073,7 @@ int main(int argc, char *argv[])
         {
             FEOF_CHECK;
             FREAD_C;
-            amdemod_cf((complexf*)input_buffer, output_buffer, the_bufsize);
+            amdemod_cf((float complex*)input_buffer, output_buffer, the_bufsize);
             FWRITE_R;
             TRY_YIELD;
         }
@@ -1090,7 +1085,7 @@ int main(int argc, char *argv[])
         {
             FEOF_CHECK;
             FREAD_C;
-            amdemod_estimator_cf((complexf*)input_buffer, output_buffer, the_bufsize, 0., 0.);
+            amdemod_estimator_cf((float complex*)input_buffer, output_buffer, the_bufsize, 0., 0.);
             FWRITE_R;
             TRY_YIELD;
         }
@@ -1150,14 +1145,14 @@ int main(int argc, char *argv[])
         for(;;)
         {
             FEOF_CHECK;
-            output_size=fir_decimate_cc((complexf*)input_buffer, (complexf*)output_buffer, the_bufsize, factor, taps, padded_taps_length);
+            output_size=fir_decimate_cc((float complex*)input_buffer, (float complex*)output_buffer, the_bufsize, factor, taps, padded_taps_length);
             //fprintf(stderr, "os %d\n",output_size);
-            fwrite(output_buffer, sizeof(complexf), output_size, stdout);
+            fwrite(output_buffer, sizeof(float complex), output_size, stdout);
             TRY_YIELD;
             input_skip=factor*output_size;
-            memmove((complexf*)input_buffer,((complexf*)input_buffer)+input_skip,(the_bufsize-input_skip)*sizeof(complexf)); //memmove lets the source and destination overlap
-            fread(((complexf*)input_buffer)+(the_bufsize-input_skip), sizeof(complexf), input_skip, stdin);
-            //fprintf(stderr,"iskip=%d output_size=%d start=%x target=%x skipcount=%x \n",input_skip,output_size,input_buffer, ((complexf*)input_buffer)+(BIG_BUFSIZE-input_skip),(BIG_BUFSIZE-input_skip));
+            memmove((float complex*)input_buffer,((float complex*)input_buffer)+input_skip,(the_bufsize-input_skip)*sizeof(float complex)); //memmove lets the source and destination overlap
+            fread(((float complex*)input_buffer)+(the_bufsize-input_skip), sizeof(float complex), input_skip, stdin);
+            //fprintf(stderr,"iskip=%d output_size=%d start=%x target=%x skipcount=%x \n",input_skip,output_size,input_buffer, ((float complex*)input_buffer)+(BIG_BUFSIZE-input_skip),(BIG_BUFSIZE-input_skip));
         }
     }
 
@@ -1205,14 +1200,14 @@ int main(int argc, char *argv[])
         for(;;)
         {
             FEOF_CHECK;
-            output_size=fir_interpolate_cc((complexf*)input_buffer, (complexf*)interp_output_buffer, the_bufsize, factor, taps, taps_length);
+            output_size=fir_interpolate_cc((float complex*)input_buffer, (float complex*)interp_output_buffer, the_bufsize, factor, taps, taps_length);
             //fprintf(stderr, "os %d\n",output_size);
-            fwrite(interp_output_buffer, sizeof(complexf), output_size, stdout);
+            fwrite(interp_output_buffer, sizeof(float complex), output_size, stdout);
             TRY_YIELD;
             input_skip=output_size/factor;
-            memmove((complexf*)input_buffer,((complexf*)input_buffer)+input_skip,(the_bufsize-input_skip)*sizeof(complexf)); //memmove lets the source and destination overlap
-            fread(((complexf*)input_buffer)+(the_bufsize-input_skip), sizeof(complexf), input_skip, stdin);
-            //fprintf(stderr,"iskip=%d output_size=%d start=%x target=%x skipcount=%x \n",input_skip,output_size,input_buffer, ((complexf*)input_buffer)+(BIG_BUFSIZE-input_skip),(BIG_BUFSIZE-input_skip));
+            memmove((float complex*)input_buffer,((float complex*)input_buffer)+input_skip,(the_bufsize-input_skip)*sizeof(float complex)); //memmove lets the source and destination overlap
+            fread(((float complex*)input_buffer)+(the_bufsize-input_skip), sizeof(float complex), input_skip, stdin);
+            //fprintf(stderr,"iskip=%d output_size=%d start=%x target=%x skipcount=%x \n",input_skip,output_size,input_buffer, ((float complex*)input_buffer)+(BIG_BUFSIZE-input_skip),(BIG_BUFSIZE-input_skip));
         }
     }
 
@@ -1222,7 +1217,7 @@ int main(int argc, char *argv[])
     /*if(!strcmp(argv[1],"ejw_test"))
     {
         printf("ejqd=[");
-        complexf ejw;
+        float complex ejw;
         float phase=0;
         for(int i=0;i<63;i++)
         {
@@ -1293,14 +1288,14 @@ int main(int argc, char *argv[])
 
         int octave=(argc>=7 && !strcmp("--octave",argv[6]));
 
-        complexf* taps=(complexf*)malloc(sizeof(complexf)*length);
+        float complex* taps=(float complex*)malloc(sizeof(float complex)*length);
 
         //Make the filter
         firdes_bandpass_c(taps, length, low_cut, high_cut, window);
 
         //Do the output
         if(octave) printf("taps=[");
-        for(int i=0;i<length;i++) printf("(%g)+(%g)*i ",iof(taps,i),qof(taps,i));
+        for(int i=0;i<length;i++) printf("(%g)+(%g)*i ",creal(taps[i]), cimag(taps[i]));
         int fft_length=1024;
         while(fft_length<length) fft_length*=2;
         //if(octave) printf("];\n");
@@ -1423,7 +1418,7 @@ int main(int argc, char *argv[])
         int resampler_output_buffer_size=(the_bufsize*interpolation)/decimation;
         sendbufsize(resampler_output_buffer_size);
         float* resampler_output_buffer=(float*)malloc(sizeof(float)*resampler_output_buffer_size);
-        float* suboptimal_resampler_temp_buffer = (suboptimal)?(float*)malloc(sizeof(float)*the_bufsize*interpolation):NULL;
+        //float* suboptimal_resampler_temp_buffer = (suboptimal)?(float*)malloc(sizeof(float)*the_bufsize*interpolation):NULL;
 
         //Generate filter taps
         int taps_length = firdes_filter_len(transition_bw);
@@ -1581,9 +1576,9 @@ int main(int argc, char *argv[])
         sendbufsize(fft_size);
 
         //make FFT plan
-        complexf* input=(complexf*)fft_malloc(sizeof(complexf)*fft_size);
-        complexf* windowed=(complexf*)fft_malloc(sizeof(complexf)*fft_size);
-        complexf* output=(complexf*)fft_malloc(sizeof(complexf)*fft_size);
+        float complex* input=(float complex*)fft_malloc(sizeof(float complex)*fft_size);
+        float complex* windowed=(float complex*)fft_malloc(sizeof(float complex)*fft_size);
+        float complex* output=(float complex*)fft_malloc(sizeof(float complex)*fft_size);
         if(benchmark) { errhead(); fprintf(stderr,"benchmarking..."); }
         FFT_PLAN_T* plan=make_fft_c2c(fft_size, windowed, output, 1, benchmark);
         if(benchmark) fprintf(stderr," done\n");
@@ -1595,18 +1590,18 @@ int main(int argc, char *argv[])
             FEOF_CHECK;
             if(every_n_samples>fft_size)
             {
-                fread(input, sizeof(complexf), fft_size, stdin);
+                fread(input, sizeof(float complex), fft_size, stdin);
                 //skipping samples before next FFT (but fseek doesn't work for pipes)
                 for(int seek_remain=every_n_samples-fft_size;seek_remain>0;seek_remain-=the_bufsize)
                 {
-                    fread(temp_f, sizeof(complexf), MIN_M(the_bufsize,seek_remain), stdin);
+                    fread(temp_f, sizeof(float complex), MIN_M(the_bufsize,seek_remain), stdin);
                 }
             }
             else
             {
                 //overlapped FFT
                 for(int i=0;i<fft_size-every_n_samples;i++) input[i]=input[i+every_n_samples];
-                fread(input+fft_size-every_n_samples, sizeof(complexf), every_n_samples, stdin);
+                fread(input+fft_size-every_n_samples, sizeof(float complex), every_n_samples, stdin);
             }
             //apply_window_c(input,windowed,fft_size,window);
             apply_precalculated_window_c(input,windowed,fft_size,windowt);
@@ -1615,15 +1610,15 @@ int main(int argc, char *argv[])
             {
                 printf("fftdata=[");
                 //we have to swap the two parts of the array to get a valid spectrum
-                for(int i=fft_size/2;i<fft_size;i++) printf("(%g)+(%g)*i ",iof(output,i),qof(output,i));
-                for(int i=0;i<fft_size/2;i++) printf("(%g)+(%g)*i ",iof(output,i),qof(output,i));
+                for(int i=fft_size/2;i<fft_size;i++) printf("(%g)+(%g)*i ", creal(output[i]), cimag(output[i]));
+                for(int i=0;i<fft_size/2;i++) printf("(%g)+(%g)*i ", creal(output[i]), cimag(output[i]));
                 printf(
                     "];\n"
                     "y=abs(fftdata);\n"
                     "refreshdata;\n"
                 );
             }
-            else fwrite(output, sizeof(complexf), fft_size, stdout);
+            else fwrite(output, sizeof(float complex), fft_size, stdout);
             TRY_YIELD;
         }
     }
@@ -1638,8 +1633,8 @@ int main(int argc, char *argv[])
         for(;;)
         {
             FEOF_CHECK;
-            fread(input_buffer, sizeof(complexf), the_bufsize, stdin);
-            logpower_cf((complexf*)input_buffer,output_buffer, the_bufsize, add_db);
+            fread(input_buffer, sizeof(float complex), the_bufsize, stdin);
+            logpower_cf((float complex*)input_buffer,output_buffer, the_bufsize, add_db);
             fwrite(output_buffer, sizeof(float), the_bufsize, stdout);
             TRY_YIELD;
         }
@@ -1670,7 +1665,7 @@ int main(int argc, char *argv[])
             FEOF_CHECK;
             for(n = 0; n < avgnumber; n++) {
                 fread (input, sizeof(float)*2, fft_size, stdin);
-                accumulate_power_cf((complexf*)input, output, fft_size);
+                accumulate_power_cf((float complex*)input, output, fft_size);
             }
             log_ff(output, output, fft_size, add_db);
             fwrite (output, sizeof(float), fft_size, stdout);
@@ -1764,15 +1759,14 @@ int main(int argc, char *argv[])
         int benchmark=(argc>=5)&&!strcmp(argv[4],"--benchmark");
         errhead(); fprintf(stderr,"FFT library used: %s\n",FFT_LIBRARY_USED);
 
-        complexf* input=(complexf*)fft_malloc(sizeof(complexf)*fft_size);
-        complexf* output=(complexf*)fft_malloc(sizeof(complexf)*fft_size);
+        float complex* input=(float complex*)fft_malloc(sizeof(float complex)*fft_size);
+        float complex* output=(float complex*)fft_malloc(sizeof(float complex)*fft_size);
 
         //fill input with random data
         srand(time(NULL));
         for(int i=0;i<fft_size;i++)
         {
-            iof(input,i)=rand()/(float)INT_MAX;
-            qof(input,i)=rand()/(float)INT_MAX;
+            input[i]=rand()/(float)INT_MAX + I*rand()/(float)INT_MAX;
         }
 
         //initialize FFT library, and measure time
@@ -1799,7 +1793,7 @@ int main(int argc, char *argv[])
         float transition_bw;
         window_t window = WINDOW_DEFAULT;
         int fd;
-        if(fd=init_fifo(argc,argv))
+        if ((fd=init_fifo(argc,argv)))
         {
             while(!read_fifo_ctl(fd,"%g %g\n",&low_cut,&high_cut)) usleep(10000);
             if(argc<=4) return badsyntax("need more required parameters (transition_bw)");
@@ -1827,25 +1821,25 @@ int main(int argc, char *argv[])
         if(!sendbufsize(getbufsize())) return -2;
 
         //prepare making the filter and doing FFT on it
-        complexf* taps=(complexf*)calloc(sizeof(complexf),fft_size); //initialize to zero
-        complexf* taps_fft=(complexf*)malloc(sizeof(complexf)*fft_size);
+        float complex* taps=(float complex*)calloc(sizeof(float complex),fft_size); //initialize to zero
+        float complex* taps_fft=(float complex*)malloc(sizeof(float complex)*fft_size);
         FFT_PLAN_T* plan_taps = make_fft_c2c(fft_size, taps, taps_fft, 1, 0); //forward, don't benchmark (we need this only once)
 
         //make FFT plans for continously processing the input
-        complexf* input = fft_malloc(fft_size*sizeof(complexf));
-        complexf* input_fourier = fft_malloc(fft_size*sizeof(complexf));
+        float complex* input = fft_malloc(fft_size*sizeof(float complex));
+        float complex* input_fourier = fft_malloc(fft_size*sizeof(float complex));
         FFT_PLAN_T* plan_forward = make_fft_c2c(fft_size, input, input_fourier, 1, 1); //forward, do benchmark
 
-        complexf* output_fourier = fft_malloc(fft_size*sizeof(complexf));
-        complexf* output_1 = fft_malloc(fft_size*sizeof(complexf));
-        complexf* output_2 = fft_malloc(fft_size*sizeof(complexf));
+        float complex* output_fourier = fft_malloc(fft_size*sizeof(float complex));
+        float complex* output_1 = fft_malloc(fft_size*sizeof(float complex));
+        float complex* output_2 = fft_malloc(fft_size*sizeof(float complex));
         //we create 2x output buffers so that one will preserve the previous overlap:
         FFT_PLAN_T* plan_inverse_1 = make_fft_c2c(fft_size, output_fourier, output_1, 0, 1); //inverse, do benchmark
         FFT_PLAN_T* plan_inverse_2 = make_fft_c2c(fft_size, output_fourier, output_2, 0, 1);
         //we initialize this buffer to 0 as it will be taken as the overlap source for the first time:
-        for(int i=0;i<fft_size;i++) iof(plan_inverse_2->output,i)=qof(plan_inverse_2->output,i)=0;
+        for(int i=0;i<fft_size;i++) output_2[i]=0;
 
-        for(int i=input_size;i<fft_size;i++) iof(input,i)=qof(input,i)=0; //we pre-pad the input buffer with zeros
+        for(int i=input_size;i<fft_size;i++) input[i]=0; //we pre-pad the input buffer with zeros
 
         for(;;)
         {
@@ -1857,12 +1851,12 @@ int main(int argc, char *argv[])
             for(int odd=0;;odd=!odd) //the processing loop
             {
                 FEOF_CHECK;
-                fread(input, sizeof(complexf), input_size, stdin);
+                fread(input, sizeof(float complex), input_size, stdin);
                 FFT_PLAN_T* plan_inverse = (odd)?plan_inverse_2:plan_inverse_1;
                 FFT_PLAN_T* plan_contains_last_overlap = (odd)?plan_inverse_1:plan_inverse_2; //the other
-                complexf* last_overlap = (complexf*)plan_contains_last_overlap->output + input_size; //+ fft_size - overlap_length;
+                float complex* last_overlap = (float complex*)plan_contains_last_overlap->output + input_size; //+ fft_size - overlap_length;
                 apply_fir_fft_cc (plan_forward, plan_inverse, taps_fft, last_overlap, overlap_length);
-                int returned=fwrite(plan_inverse->output, sizeof(complexf), input_size, stdout);
+                fwrite(plan_inverse->output, sizeof(float complex), input_size, stdout);
                 if(read_fifo_ctl(fd,"%g %g\n",&low_cut,&high_cut)) break;
                 TRY_YIELD;
             }
@@ -2078,8 +2072,7 @@ int main(int argc, char *argv[])
             FREAD_R;
             for(int i=0;i<the_bufsize;i++)
             {
-                iof(output_buffer,i)=input_buffer[i];
-                qof(output_buffer,i)=q_value;
+                output_buffer[i] = input_buffer[i] + I*q_value;
             }
             FWRITE_C;
             TRY_YIELD;
@@ -2118,7 +2111,7 @@ int main(int argc, char *argv[])
         {
             FEOF_CHECK;
             FREAD_C;
-            add_dcoffset_cc((complexf*)input_buffer, (complexf*)output_buffer, the_bufsize);
+            add_dcoffset_cc((float complex*)input_buffer, (float complex*)output_buffer, the_bufsize);
             FWRITE_C;
             TRY_YIELD;
         }
@@ -2132,7 +2125,7 @@ int main(int argc, char *argv[])
         {
             FEOF_CHECK;
             FREAD_R;
-            last_phase = fmmod_fc(input_buffer, (complexf*)output_buffer, the_bufsize, last_phase);
+            last_phase = fmmod_fc(input_buffer, (float complex*)output_buffer, the_bufsize, last_phase);
             FWRITE_C;
             TRY_YIELD;
         }
@@ -2150,7 +2143,7 @@ int main(int argc, char *argv[])
         {
             FEOF_CHECK;
             FREAD_C;
-            fixed_amplitude_cc((complexf*)input_buffer, (complexf*)output_buffer, the_bufsize, new_amplitude);
+            fixed_amplitude_cc((float complex*)input_buffer, (float complex*)output_buffer, the_bufsize, new_amplitude);
             FWRITE_C;
             TRY_YIELD;
         }
@@ -2159,7 +2152,6 @@ int main(int argc, char *argv[])
     if((!strcmp(argv[1],"mono2stereo_i16"))||(!strcmp(argv[1],"mono2stereo_s16")))
     {
         if(!sendbufsize(initialize_buffers())) return -2;
-        float last_phase = 0;
         for(;;)
         {
             FEOF_CHECK;
@@ -2185,9 +2177,9 @@ int main(int argc, char *argv[])
         char power_value_buf[101];
         int power_value_buf_size;
         int report_cntr=0;
-        complexf* zerobuf = (complexf*)malloc(sizeof(complexf)*the_bufsize);
+        float complex* zerobuf = (float complex*)malloc(sizeof(float complex)*the_bufsize);
         for(int i=0;i<the_bufsize*2;i++) *(((float*)zerobuf)+i)=0;
-        if(fd=init_fifo(argc,argv)) while(!read_fifo_ctl(fd,"%g\n",&squelch_level)) usleep(10000);
+        if ((fd=init_fifo(argc,argv))) while(!read_fifo_ctl(fd,"%g\n",&squelch_level)) usleep(10000);
         else return badsyntax("need required parameter (--fifo <fifo>)");
         errhead(); fprintf(stderr, "initial squelch level is %g\n", squelch_level);
         if((argc<=5)||((argc>5)&&(strcmp(argv[4],"--outfifo")))) return badsyntax("need required parameter (--outfifo <fifo>)");
@@ -2205,7 +2197,7 @@ int main(int argc, char *argv[])
         {
             FEOF_CHECK;
             FREAD_C; //read input data
-            power = get_power_c((complexf*)input_buffer, the_bufsize, decimation);
+            power = get_power_c((float complex*)input_buffer, the_bufsize, decimation);
             if(report_cntr++>report_every_nth)
             {
                 report_cntr=0;
@@ -2215,12 +2207,12 @@ int main(int argc, char *argv[])
             if(squelch_level==0||power>=squelch_level)
             {
                 //fprintf(stderr,"P");
-                fwrite(input_buffer, sizeof(complexf), the_bufsize, stdout);
+                fwrite(input_buffer, sizeof(float complex), the_bufsize, stdout);
             }
             else
             {
                 //fprintf(stderr,"S");
-                fwrite(zerobuf, sizeof(complexf), the_bufsize, stdout);
+                fwrite(zerobuf, sizeof(float complex), the_bufsize, stdout);
             }
             if(read_fifo_ctl(fd,"%g\n",&squelch_level)) { errhead(); fprintf(stderr, "new squelch level is %g\n", squelch_level); }
             TRY_YIELD;
@@ -2259,11 +2251,11 @@ int main(int argc, char *argv[])
         sendbufsize(ddc.fft_size);
 
         //make FFT plan
-        complexf* input =    (complexf*)fft_malloc(sizeof(complexf)*ddc.fft_size);
-        complexf* windowed = (complexf*)fft_malloc(sizeof(complexf)*ddc.fft_size);
-        complexf* output =   (complexf*)fft_malloc(sizeof(complexf)*ddc.fft_size);
+        float complex* input =    (float complex*)fft_malloc(sizeof(float complex)*ddc.fft_size);
+        float complex* windowed = (float complex*)fft_malloc(sizeof(float complex)*ddc.fft_size);
+        float complex* output =   (float complex*)fft_malloc(sizeof(float complex)*ddc.fft_size);
 
-        for(int i=0;i<ddc.fft_size;i++) iof(input,i)=qof(input,i)=0; //null the input buffer
+        for(int i=0;i<ddc.fft_size;i++) input[i]=0; //null the input buffer
 
         int benchmark = 1; 
         if(benchmark) { errhead(); fprintf(stderr,"benchmarking FFT..."); }
@@ -2275,11 +2267,11 @@ int main(int argc, char *argv[])
             FEOF_CHECK;
             //overlapped FFT
             for(int i=0;i<ddc.overlap_length;i++) input[i]=input[i+ddc.input_size];
-            fread(input+ddc.overlap_length, sizeof(complexf), ddc.input_size, stdin);
+            fread(input+ddc.overlap_length, sizeof(float complex), ddc.input_size, stdin);
             //apply_window_c(input,windowed,ddc.fft_size,window);
-            memcpy(windowed, input, ddc.fft_size*sizeof(complexf)); //we can switch off windows; TODO: it is likely that we shouldn't apply a window to both the FFT and the filter.
+            memcpy(windowed, input, ddc.fft_size*sizeof(float complex)); //we can switch off windows; TODO: it is likely that we shouldn't apply a window to both the FFT and the filter.
             fft_execute(plan);
-            fwrite(output, sizeof(complexf), ddc.fft_size, stdout);
+            fwrite(output, sizeof(float complex), ddc.fft_size, stdout);
             TRY_YIELD;
         }
     }
@@ -2290,7 +2282,7 @@ int main(int argc, char *argv[])
         int plusarg=0;
 
         int fd;
-        if(fd=init_fifo(argc,argv))
+        if ((fd=init_fifo(argc,argv)))
         {
             while(!read_fifo_ctl(fd,"%g\n",&shift_rate)) usleep(10000);
             plusarg=1;
@@ -2324,8 +2316,8 @@ int main(int argc, char *argv[])
         sendbufsize(ddc.post_input_size/ddc.post_decimation); //TODO not exactly correct
 
         //prepare making the filter and doing FFT on it
-        complexf* taps=(complexf*)calloc(sizeof(complexf),ddc.fft_size); //initialize to zero
-        complexf* taps_fft=(complexf*)malloc(sizeof(complexf)*ddc.fft_size);
+        float complex* taps=(float complex*)calloc(sizeof(float complex),ddc.fft_size); //initialize to zero
+        float complex* taps_fft=(float complex*)malloc(sizeof(float complex)*ddc.fft_size);
         FFT_PLAN_T* plan_taps = make_fft_c2c(ddc.fft_size, taps, taps_fft, 1, 0); //forward, don't benchmark (we need this only once)
 
         //make the filter
@@ -2336,24 +2328,24 @@ int main(int argc, char *argv[])
         fft_swap_sides(taps_fft,ddc.fft_size);
 
         //make FFT plan
-        complexf* inv_input =    (complexf*)fft_malloc(sizeof(complexf)*ddc.fft_inv_size);
-        complexf* inv_output =   (complexf*)fft_malloc(sizeof(complexf)*ddc.fft_inv_size);
+        float complex* inv_input =    (float complex*)fft_malloc(sizeof(float complex)*ddc.fft_inv_size);
+        float complex* inv_output =   (float complex*)fft_malloc(sizeof(float complex)*ddc.fft_inv_size);
         errhead(); fprintf(stderr,"benchmarking FFT...");
         FFT_PLAN_T* plan_inverse = make_fft_c2c(ddc.fft_inv_size, inv_input, inv_output, 0, 1); //inverse, do benchmark
         fprintf(stderr," done\n");
         
         //alloc. buffers
-        complexf* input =    (complexf*)fft_malloc(sizeof(complexf)*ddc.fft_size);
-        complexf* output =   (complexf*)fft_malloc(sizeof(complexf)*ddc.post_input_size);
+        float complex* input =    (float complex*)fft_malloc(sizeof(float complex)*ddc.fft_size);
+        float complex* output =   (float complex*)fft_malloc(sizeof(float complex)*ddc.post_input_size);
 
         decimating_shift_addition_status_t shift_stat;
         bzero(&shift_stat, sizeof(shift_stat));
         for(;;)
         {
             FEOF_CHECK;
-            fread(input, sizeof(complexf), ddc.fft_size, stdin);
+            fread(input, sizeof(float complex), ddc.fft_size, stdin);
             shift_stat = fastddc_inv_cc(input, output, &ddc, plan_inverse, taps_fft, shift_stat);
-            fwrite(output, sizeof(complexf), shift_stat.output_size, stdout);
+            fwrite(output, sizeof(float complex), shift_stat.output_size, stdout);
             //fprintf(stderr, "ss os = %d\n", shift_stat.output_size);
             TRY_YIELD;
             if(read_fifo_ctl(fd,"%g\n",&shift_rate)) break;
@@ -2368,7 +2360,7 @@ int main(int argc, char *argv[])
         if(argc<=2) return badsyntax("need required parameter (fft_size)");
         sscanf(argv[2],"%d",&fft_size);
 
-        complexf* fft_input=(complexf*)malloc(sizeof(complexf)*fft_size);
+        float complex* fft_input=(float complex*)malloc(sizeof(float complex)*fft_size);
         initialize_buffers();
         if(!sendbufsize(fft_size)) return -2;
 
@@ -2376,11 +2368,11 @@ int main(int argc, char *argv[])
         for(;;)
         {
             FEOF_CHECK;
-            fread(fft_input, sizeof(complexf), fft_size, stdin);
+            fread(fft_input, sizeof(float complex), fft_size, stdin);
             printf("fftdata=[");
             //we have to swap the two parts of the array to get a valid spectrum
-            for(int i=fft_size/2;i<fft_size;i++) printf("(%g)+(%g)*i ",iof(fft_input,i),qof(fft_input,i));
-            for(int i=0;i<fft_size/2;i++) printf("(%g)+(%g)*i ",iof(fft_input,i),qof(fft_input,i)); 
+            for(int i=fft_size/2;i<fft_size;i++) printf("(%g)+(%g)*i ", creal(fft_input[i]), cimag(fft_input[i]));
+            for(int i=0;i<fft_size/2;i++) printf("(%g)+(%g)*i ", creal(fft_input[i]), cimag(fft_input[i])); 
             printf(
                 "];\n"
                 "y=abs(fftdata);\n"
@@ -2546,10 +2538,10 @@ int main(int argc, char *argv[])
             FEOF_CHECK;
             FREAD_C;
             //fprintf(stderr, "| i");
-            // pll_cc(&pll, (complexf*)input_buffer, output_buffer, NULL, the_bufsize);
+            // pll_cc(&pll, (float complex*)input_buffer, output_buffer, NULL, the_bufsize);
             // fwrite(output_buffer, sizeof(float), the_bufsize, stdout);
-            pll_cc(&pll, (complexf*)input_buffer, NULL, (complexf*)output_buffer, the_bufsize);
-            fwrite(output_buffer, sizeof(complexf), the_bufsize, stdout);
+            pll_cc(&pll, (float complex*)input_buffer, NULL, (float complex*)output_buffer, the_bufsize);
+            fwrite(output_buffer, sizeof(float complex), the_bufsize, stdout);
             //fprintf(stderr, "| o");
             TRY_YIELD;
         }
@@ -2611,7 +2603,7 @@ int main(int argc, char *argv[])
         for(;;)
         {
             FEOF_CHECK;
-            timing_recovery_cc((complexf*)input_buffer, (complexf*)output_buffer, the_bufsize, timing_error, (int*)sampled_indexes, &state);
+            timing_recovery_cc((float complex*)input_buffer, (float complex*)output_buffer, the_bufsize, timing_error, (int*)sampled_indexes, &state);
             //fprintf(stderr, "trcc is=%d, os=%d, ip=%d\n",the_bufsize, state.output_size, state.input_processed);
             if(timing_error) fwrite(timing_error, sizeof(float), state.output_size, stdout);
             else if(sampled_indexes) 
@@ -2619,13 +2611,13 @@ int main(int argc, char *argv[])
                 for(int i=0;i<state.output_size;i++) sampled_indexes[i]+=buffer_start_counter;
                 fwrite(sampled_indexes, sizeof(unsigned), state.output_size, stdout);
             }
-            else fwrite(output_buffer, sizeof(complexf), state.output_size, stdout);
+            else fwrite(output_buffer, sizeof(float complex), state.output_size, stdout);
             TRY_YIELD;
             //fprintf(stderr, "state.input_processed = %d\n", state.input_processed);
             buffer_start_counter+=state.input_processed;
-            memmove((complexf*)input_buffer,((complexf*)input_buffer)+state.input_processed,(the_bufsize-state.input_processed)*sizeof(complexf)); //memmove lets the source and destination overlap
-            fread(((complexf*)input_buffer)+(the_bufsize-state.input_processed), sizeof(complexf), state.input_processed, stdin);
-            //fprintf(stderr,"iskip=%d state.output_size=%d start=%x target=%x skipcount=%x \n",state.input_processed,state.output_size,input_buffer, ((complexf*)input_buffer)+(BIG_BUFSIZE-state.input_processed),(BIG_BUFSIZE-state.input_processed));
+            memmove((float complex*)input_buffer,((float complex*)input_buffer)+state.input_processed,(the_bufsize-state.input_processed)*sizeof(float complex)); //memmove lets the source and destination overlap
+            fread(((float complex*)input_buffer)+(the_bufsize-state.input_processed), sizeof(float complex), state.input_processed, stdin);
+            //fprintf(stderr,"iskip=%d state.output_size=%d start=%x target=%x skipcount=%x \n",state.input_processed,state.output_size,input_buffer, ((float complex*)input_buffer)+(BIG_BUFSIZE-state.input_processed),(BIG_BUFSIZE-state.input_processed));
         }
     }
 
@@ -2641,25 +2633,25 @@ int main(int argc, char *argv[])
         if(out_of_n_samples<samples_to_plot) return badsyntax("out_of_n_samples should be < samples_to_plot");
         int mode2d = 0;
         if(argc>4) mode2d = !strcmp(argv[4], "--2d"); 
-        complexf* read_buf = (complexf*)malloc(sizeof(complexf)*the_bufsize);
+        float complex* read_buf = (float complex*)malloc(sizeof(float complex)*the_bufsize);
 
         if(!sendbufsize(initialize_buffers())) return -2;
         for(;;)
         {
-            fread(read_buf, sizeof(complexf), samples_to_plot, stdin);          
+            fread(read_buf, sizeof(float complex), samples_to_plot, stdin);          
             printf("N = %d;\nisig = [", samples_to_plot);
-            for(int i=0;i<samples_to_plot;i++) printf("%f ", iof(read_buf, i));
+            for(int i=0;i<samples_to_plot;i++) printf("%f ", creal(read_buf[i]));
             printf("];\nqsig = [");
-            for(int i=0;i<samples_to_plot;i++) printf("%f ", qof(read_buf, i));
+            for(int i=0;i<samples_to_plot;i++) printf("%f ", cimag(read_buf[i]));
             printf("];\nzsig = [0:N-1];\n");
             if(mode2d) printf("subplot(2,1,1);\nplot(zsig,isig);\nsubplot(2,1,2);\nplot(zsig,qsig);\n");
             else printf("plot3(isig,zsig,qsig);\n");
             //printf("xlim([-1 1]);\nzlim([-1 1]);\n");
             fflush(stdout);
-            //if(fseek(stdin, (out_of_n_samples - samples_to_plot)*sizeof(complexf), SEEK_CUR)<0) { perror("fseek error"); return -3; } //this cannot be used on stdin
+            //if(fseek(stdin, (out_of_n_samples - samples_to_plot)*sizeof(float complex), SEEK_CUR)<0) { perror("fseek error"); return -3; } //this cannot be used on stdin
             for(int seek_remain=out_of_n_samples-samples_to_plot;seek_remain>0;seek_remain-=samples_to_plot)
             {
-                fread(read_buf, sizeof(complexf), MIN_M(samples_to_plot,seek_remain), stdin);
+                fread(read_buf, sizeof(float complex), MIN_M(samples_to_plot,seek_remain), stdin);
             }
             FEOF_CHECK;
             TRY_YIELD;
@@ -2680,7 +2672,7 @@ int main(int argc, char *argv[])
         {
             FEOF_CHECK;
             fread((unsigned char*)input_buffer, sizeof(unsigned char), the_bufsize, stdin);
-            psk_modulator_u8_c((unsigned char*)input_buffer, (complexf*)output_buffer, the_bufsize, n_psk);
+            psk_modulator_u8_c((unsigned char*)input_buffer, (float complex*)output_buffer, the_bufsize, n_psk);
             FWRITE_C;
             TRY_YIELD;
         }
@@ -2717,16 +2709,15 @@ int main(int argc, char *argv[])
         if(interpolation<=0) return badsyntax("interpolation should be >0"); 
         if(!initialize_buffers()) return -2;
         sendbufsize(the_bufsize*interpolation);
-        complexf* local_output_buffer = (complexf*)malloc(sizeof(complexf)*the_bufsize*interpolation);
-        complexf last_input;
-        iof(&last_input,0) = 0;
-        qof(&last_input,0) = 0;
+        float complex* local_output_buffer = (float complex*)malloc(sizeof(float complex)*the_bufsize*interpolation);
+        float complex last_input;
+        last_input = 0;
         for(;;)
         {
             FEOF_CHECK;
             FREAD_C;
-            last_input = psk31_interpolate_sine_cc((complexf*)input_buffer, local_output_buffer, the_bufsize, interpolation, last_input);
-            fwrite((void*)local_output_buffer, sizeof(complexf), the_bufsize*interpolation, stdout);
+            last_input = psk31_interpolate_sine_cc((float complex*)input_buffer, local_output_buffer, the_bufsize, interpolation, last_input);
+            fwrite((void*)local_output_buffer, sizeof(float complex), the_bufsize*interpolation, stdout);
             TRY_YIELD;
         }
     }
@@ -2751,7 +2742,7 @@ int main(int argc, char *argv[])
     {
         if(!initialize_buffers()) return -2;
         sendbufsize(1);
-        char local_input_buffer[8];
+        unsigned char local_input_buffer[8];
         for(;;)
         {
             FEOF_CHECK;
@@ -2844,7 +2835,7 @@ int main(int argc, char *argv[])
 
         float* buffer_output_error  = (!(output_combined || output_error))  ? NULL : (float*)malloc(sizeof(float)*the_bufsize);
         float* buffer_output_dphase = (!(output_combined || output_dphase)) ? NULL : (float*)malloc(sizeof(float)*the_bufsize);
-        complexf* buffer_output_nco = (!(output_combined || output_nco))    ? NULL : (complexf*)malloc(sizeof(complexf)*the_bufsize);
+        float complex* buffer_output_nco = (!(output_combined || output_nco))    ? NULL : (float complex*)malloc(sizeof(float complex)*the_bufsize);
 
         FILE* file_output_error = NULL;
         FILE* file_output_dphase = NULL;
@@ -2861,19 +2852,19 @@ int main(int argc, char *argv[])
         {
             FEOF_CHECK;
             FREAD_C;
-            bpsk_costas_loop_cc((complexf*)input_buffer, (complexf*)output_buffer, the_bufsize, 
+            bpsk_costas_loop_cc((float complex*)input_buffer, (float complex*)output_buffer, the_bufsize, 
                     buffer_output_error, buffer_output_dphase, buffer_output_nco, 
                     &state);
             if(output_error) fwrite(buffer_output_error, sizeof(float), the_bufsize, stdout);
             else if(output_dphase) fwrite(buffer_output_dphase, sizeof(float), the_bufsize, stdout);
-            else if(output_nco) fwrite(buffer_output_nco, sizeof(complexf), the_bufsize, stdout);
+            else if(output_nco) fwrite(buffer_output_nco, sizeof(float complex), the_bufsize, stdout);
             else 
             {
                 if(output_combined) 
                 {
                     fwrite(buffer_output_error, sizeof(float), the_bufsize, file_output_error);
                     fwrite(buffer_output_dphase, sizeof(float), the_bufsize, file_output_dphase);
-                    fwrite(buffer_output_nco, sizeof(complexf), the_bufsize, file_output_nco);
+                    fwrite(buffer_output_nco, sizeof(float complex), the_bufsize, file_output_nco);
                 }
                 FWRITE_C; 
             }
@@ -2908,7 +2899,7 @@ int main(int argc, char *argv[])
         {
             FEOF_CHECK;
             FREAD_C;
-            simple_agc_cc((complexf*)input_buffer, (complexf*)output_buffer, the_bufsize, rate, reference, max_gain, &current_gain);
+            simple_agc_cc((float complex*)input_buffer, (float complex*)output_buffer, the_bufsize, rate, reference, max_gain, &current_gain);
             FWRITE_C;
             TRY_YIELD;
         }
@@ -2934,14 +2925,14 @@ int main(int argc, char *argv[])
 
         int octave=(argc>=6 && !strcmp("--octave",argv[5]));
 
-        complexf* taps=(complexf*)malloc(sizeof(complexf)*length);
+        float complex* taps=(float complex*)malloc(sizeof(float complex)*length);
 
         //Make the filter
         firdes_add_peak_c(taps, length, rate, window, 0, 1);
 
         //Do the output
         if(octave) printf("taps=[");
-        for(int i=0;i<length;i++) printf("(%g)+(%g)*i ",iof(taps,i),qof(taps,i));
+        for(int i=0;i<length;i++) printf("(%g)+(%g)*i ", creal(taps[i]), cimag(taps[i]));
         int fft_length=1024;
         while(fft_length<length) fft_length*=2;
         //if(octave) printf("];\n");
@@ -2979,7 +2970,7 @@ int main(int argc, char *argv[])
         sendbufsize(the_bufsize);
         if(the_bufsize - taps_length <= 0 ) return badsyntax("taps_length is below buffer size, decrease taps_length");
 
-        complexf* taps = (complexf*)calloc(sizeof(complexf),taps_length);
+        float complex* taps = (float complex*)calloc(sizeof(float complex),taps_length);
         for(int i=0; i<num_peaks; i++)
         {
             //fprintf(stderr, "nr = %d\n", i==num_peaks-1);
@@ -2991,12 +2982,12 @@ int main(int argc, char *argv[])
         for(;;)
         {
             FEOF_CHECK;
-            output_size = apply_fir_cc((complexf*)input_buffer, (complexf*)output_buffer, the_bufsize, taps, taps_length);
-            fwrite(output_buffer, sizeof(complexf), output_size, stdout);
+            output_size = apply_fir_cc((float complex*)input_buffer, (float complex*)output_buffer, the_bufsize, taps, taps_length);
+            fwrite(output_buffer, sizeof(float complex), output_size, stdout);
             //fprintf(stderr, "os = %d, is = %d\n", output_size, the_bufsize);
             TRY_YIELD;
-            memmove((complexf*)input_buffer,((complexf*)input_buffer)+output_size,(the_bufsize-output_size)*sizeof(complexf)); 
-            fread(((complexf*)input_buffer)+(the_bufsize-output_size), sizeof(complexf), output_size, stdin);
+            memmove((float complex*)input_buffer,((float complex*)input_buffer)+output_size,(the_bufsize-output_size)*sizeof(float complex)); 
+            fread(((float complex*)input_buffer)+(the_bufsize-output_size), sizeof(float complex), output_size, stdin);
         }
     }
 
@@ -3038,7 +3029,7 @@ int main(int argc, char *argv[])
         errhead(); fprintf(stderr, "a_signal = %f, a_noise = %f\n", a_signal, a_noise);
         if(!initialize_buffers()) return -2;
         sendbufsize(the_bufsize); 
-        complexf* awgn_buffer = (complexf*)malloc(sizeof(complexf)*the_bufsize);
+        float complex* awgn_buffer = (float complex*)malloc(sizeof(float complex)*the_bufsize);
         for(;;)
         {
             FEOF_CHECK;
@@ -3049,14 +3040,14 @@ int main(int argc, char *argv[])
             {
                 for(;;)
                 {
-                    int items_read=fread(awgn_buffer, sizeof(complexf), the_bufsize, awgnfile);
+                    int items_read=fread(awgn_buffer, sizeof(float complex), the_bufsize, awgnfile);
                     if(items_read<the_bufsize) rewind(awgnfile);
                     else break;
                 }
             }
             /*if(snrshow) 
             {
-                float power_signal = total_logpower_cf((complexf*)input_buffer, the_bufsize);
+                float power_signal = total_logpower_cf((float complex*)input_buffer, the_bufsize);
                 float power_noise = total_logpower_cf(awgn_buffer, the_bufsize);
                 fprintf(stderr, "csdr awgn_cc: at the beginning, power_signal = %f dB, power_noise = %f dB\n", power_signal, power_noise);
             }*/
@@ -3064,7 +3055,7 @@ int main(int argc, char *argv[])
             gain_ff((float*)awgn_buffer, (float*)awgn_buffer, the_bufsize*2, a_noise*0.707);
             if(snrshow)
             {
-                float power_signal = total_logpower_cf((complexf*)input_buffer, the_bufsize);
+                float power_signal = total_logpower_cf((float complex*)input_buffer, the_bufsize);
                 float power_noise = total_logpower_cf(awgn_buffer, the_bufsize);
                 //fprintf(stderr, "csdr awgn_cc: after gain_ff, power_signal = %f dB, power_noise = %f dB\n", power_signal, power_noise);
                 errhead(); fprintf(stderr, "SNR = %f dB\n", power_signal - power_noise);
@@ -3097,7 +3088,7 @@ int main(int argc, char *argv[])
         for(;;)
         {
             FEOF_CHECK;
-            get_random_gaussian_samples_c((complexf*)output_buffer, the_bufsize, urandom);
+            get_random_gaussian_samples_c((float complex*)output_buffer, the_bufsize, urandom);
             FWRITE_C;
             TRY_YIELD;
         }
@@ -3194,12 +3185,12 @@ int main(int argc, char *argv[])
         for(;;)
         {
             FEOF_CHECK;
-            output_size = apply_real_fir_cc((complexf*)input_buffer, (complexf*)output_buffer, the_bufsize, taps, num_taps);
-            fwrite(output_buffer, sizeof(complexf), output_size, stdout);
+            output_size = apply_real_fir_cc((float complex*)input_buffer, (float complex*)output_buffer, the_bufsize, taps, num_taps);
+            fwrite(output_buffer, sizeof(float complex), output_size, stdout);
             //fprintf(stderr, "os = %d, is = %d, num_taps = %d\n", output_size, the_bufsize, num_taps);
             TRY_YIELD;
-            memmove((complexf*)input_buffer,((complexf*)input_buffer)+output_size,(the_bufsize-output_size)*sizeof(complexf)); 
-            fread(((complexf*)input_buffer)+(the_bufsize-output_size), sizeof(complexf), output_size, stdin);
+            memmove((float complex*)input_buffer,((float complex*)input_buffer)+output_size,(the_bufsize-output_size)*sizeof(float complex)); 
+            fread(((float complex*)input_buffer)+(the_bufsize-output_size), sizeof(float complex), output_size, stdin);
         }
     }
 
@@ -3226,12 +3217,12 @@ int main(int argc, char *argv[])
         if(argc<=2) return badsyntax("required parameter <interpolation> is missing.");
         sscanf(argv[2],"%d",&interpolation);
         if(!sendbufsize(interpolation*initialize_buffers())) return -2;
-        complexf* plainint_output_buffer = (complexf*)malloc(sizeof(complexf)*the_bufsize*interpolation);
+        float complex* plainint_output_buffer = (float complex*)malloc(sizeof(float complex)*the_bufsize*interpolation);
         for(;;)
         {
             FEOF_CHECK;
             FREAD_C;
-            plain_interpolate_cc((complexf*)input_buffer, plainint_output_buffer, the_bufsize, interpolation);
+            plain_interpolate_cc((float complex*)input_buffer, plainint_output_buffer, the_bufsize, interpolation);
             fwrite(plainint_output_buffer, sizeof(float)*2, the_bufsize*interpolation, stdout);
             TRY_YIELD;
         }
@@ -3246,7 +3237,7 @@ int main(int argc, char *argv[])
         {
             FEOF_CHECK;
             FREAD_C;
-            dbpsk_decoder_c_u8((complexf*)input_buffer, local_output_buffer, the_bufsize);
+            dbpsk_decoder_c_u8((float complex*)input_buffer, local_output_buffer, the_bufsize);
             fwrite(local_output_buffer, sizeof(unsigned char), the_bufsize, stdout);
             TRY_YIELD;
         }
@@ -3263,42 +3254,43 @@ int main(int argc, char *argv[])
         if(argc<=3) return badsyntax("required parameter <filter_length> is missing.");
         sscanf(argv[3],"%d",&filter_length);
 
-        complexf* mark_filter = (complexf*)malloc(sizeof(complexf)*filter_length);
-        complexf* space_filter = (complexf*)malloc(sizeof(complexf)*filter_length);
+        float complex* mark_filter = (float complex*)malloc(sizeof(float complex)*filter_length);
+        float complex* space_filter = (float complex*)malloc(sizeof(float complex)*filter_length);
         firdes_add_peak_c(mark_filter, filter_length, frequency_shift/2, WINDOW_DEFAULT, 0, 1);
         firdes_add_peak_c(space_filter, filter_length, -frequency_shift/2, WINDOW_DEFAULT, 0, 1);
 
         if(!sendbufsize(initialize_buffers())) return -2;
 
-        int input_skip=0;
         int output_size=0;
         FREAD_C;
         for(;;)
         {
             FEOF_CHECK;
-            output_size=bfsk_demod_cf((complexf*)input_buffer, output_buffer, the_bufsize, mark_filter, space_filter, filter_length);
+            output_size=bfsk_demod_cf((float complex*)input_buffer, output_buffer, the_bufsize, mark_filter, space_filter, filter_length);
             fwrite(output_buffer, sizeof(float), output_size, stdout);
             TRY_YIELD;
-            memmove((complexf*)input_buffer,((complexf*)input_buffer)+output_size,(the_bufsize-output_size)*sizeof(complexf));
-            fread(((complexf*)input_buffer)+(the_bufsize-output_size), sizeof(complexf), output_size, stdin);
+            memmove((float complex*)input_buffer,((float complex*)input_buffer)+output_size,(the_bufsize-output_size)*sizeof(float complex));
+            fread(((float complex*)input_buffer)+(the_bufsize-output_size), sizeof(float complex), output_size, stdin);
         }
         return 0;
     }
 
     if(!strcmp(argv[1], "add_const_cc")) //<i> <q>
     {
-        complexf x;
+        float complex x;
+	float realx, imagx;
         if(argc<=2) return badsyntax("required parameter <add_i> is missing.");
-        sscanf(argv[2],"%f",&iofv(x));
+        sscanf(argv[2],"%f", &realx);
         if(argc<=2) return badsyntax("required parameter <add_q> is missing.");
-        sscanf(argv[2],"%f",&qofv(x));
+        sscanf(argv[2],"%f", &imagx);
+	x = realx + I*imagx;
 
         if(!sendbufsize(initialize_buffers())) return -2;
         for(;;)
         {
             FEOF_CHECK;
             FREAD_C;
-            add_const_cc((complexf*)input_buffer, (complexf*)output_buffer, the_bufsize, x);
+            add_const_cc((float complex*)input_buffer, (float complex*)output_buffer, the_bufsize, x);
             FWRITE_C;
             TRY_YIELD;
         }
@@ -3355,7 +3347,7 @@ int main(int argc, char *argv[])
         float rate;
 
         int fd;
-        if(fd=init_fifo(argc,argv))
+        if ((fd=init_fifo(argc,argv)))
         {
             while(!read_fifo_ctl(fd,"%g\n",&rate)) usleep(10000);
         }
@@ -3383,7 +3375,7 @@ int main(int argc, char *argv[])
                 while(remain)
                 {
                     current_size=(remain>1024)?1024:remain;
-                    starting_phase=shift_addition_fc(ibufptr, (complexf*)obufptr, current_size, data, starting_phase);
+                    starting_phase=shift_addition_fc(ibufptr, (float complex*)obufptr, current_size, data, starting_phase);
                     ibufptr+=current_size;
                     obufptr+=current_size*2;
                     remain-=current_size;
@@ -3434,7 +3426,7 @@ int main(int argc, char *argv[])
         //make FFT plan
         float* input=(float*)fft_malloc(sizeof(float)*fft_in_size);
         float* windowed=(float*)fft_malloc(sizeof(float)*fft_in_size);
-        complexf* output=(complexf*)fft_malloc(sizeof(complexf)*fft_out_size);
+        float complex* output=(float complex*)fft_malloc(sizeof(float complex)*fft_out_size);
         if(benchmark) { errhead(); fprintf(stderr,"benchmarking..."); }
         FFT_PLAN_T* plan=make_fft_r2c(fft_in_size, windowed, output, benchmark);
         if(benchmark) fprintf(stderr," done\n");
@@ -3450,7 +3442,7 @@ int main(int argc, char *argv[])
                 //skipping samples before next FFT (but fseek doesn't work for pipes)
                 for(int seek_remain=every_n_samples-fft_in_size;seek_remain>0;seek_remain-=the_bufsize)
                 {
-                    fread(temp_f, sizeof(complexf), MIN_M(the_bufsize,seek_remain), stdin);
+                    fread(temp_f, sizeof(float complex), MIN_M(the_bufsize,seek_remain), stdin);
                 }
             }
             else
@@ -3468,8 +3460,8 @@ int main(int argc, char *argv[])
             // TODO
                 printf("fftdata=[");
                 //we have to swap the two parts of the array to get a valid spectrum
-                for(int i=fft_size/2;i<fft_size;i++) printf("(%g)+(%g)*i ",iof(output,i),qof(output,i));
-                for(int i=0;i<fft_size/2;i++) printf("(%g)+(%g)*i ",iof(output,i),qof(output,i));
+                for(int i=fft_size/2;i<fft_size;i++) printf("(%g)+(%g)*i ", creal(output[i]), cimag(output[i]));
+                for(int i=0;i<fft_size/2;i++) printf("(%g)+(%g)*i ", creal(output[i]), cimag(output[i]));
                 printf(
                     "];\n"
                     "y=abs(fftdata);\n"
@@ -3477,7 +3469,7 @@ int main(int argc, char *argv[])
                 );
 #endif
             }
-            else fwrite(output, sizeof(complexf), fft_out_size, stdout);
+            else fwrite(output, sizeof(float complex), fft_out_size, stdout);
             TRY_YIELD;
         }
     }
@@ -3537,7 +3529,7 @@ int main(int argc, char *argv[])
         for(;;)
         {
             FEOF_CHECK;
-            unsigned char cchar = input_buffer[input_index++]=(unsigned char)fgetc(stdin);
+            input_buffer[input_index++]=(unsigned char)fgetc(stdin);
             if(valid_values<pattern_values_length) { valid_values++; continue; }
             if(input_index>=pattern_values_length) input_index=0;
             int match=1;

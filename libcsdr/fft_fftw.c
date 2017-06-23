@@ -3,7 +3,7 @@
 #include "fft_fftw.h"
 #include <stdlib.h>
 
-FFT_PLAN_T* make_fft_c2c(int size, complexf* input, complexf* output, int forward, int benchmark)
+FFT_PLAN_T* make_fft_c2c(int size, const float complex *input, float complex *output, int forward, int benchmark)
 {
 	FFT_PLAN_T* plan=(FFT_PLAN_T*)malloc(sizeof(FFT_PLAN_T));
 	plan->plan = fftwf_plan_dft_1d(size, (fftwf_complex*)input, (fftwf_complex*)output, (forward)?FFTW_FORWARD:FFTW_BACKWARD, (benchmark)?FFTW_MEASURE:FFTW_ESTIMATE);
@@ -13,7 +13,7 @@ FFT_PLAN_T* make_fft_c2c(int size, complexf* input, complexf* output, int forwar
 	return plan;
 }
 
-FFT_PLAN_T* make_fft_r2c(int size, float* input, complexf* output, int benchmark) //always forward DFT
+FFT_PLAN_T* make_fft_r2c(int size, float *input, float complex *output, int benchmark) //always forward DFT
 {
 	FFT_PLAN_T* plan=(FFT_PLAN_T*)malloc(sizeof(FFT_PLAN_T));
 	plan->plan = fftwf_plan_dft_r2c_1d(size, input, (fftwf_complex*)output, (benchmark)?FFTW_MEASURE:FFTW_ESTIMATE);
@@ -23,7 +23,7 @@ FFT_PLAN_T* make_fft_r2c(int size, float* input, complexf* output, int benchmark
 	return plan;
 }
 
-FFT_PLAN_T* make_fft_c2r(int size, complexf* input, float* output, int benchmark) //always backward DFT
+FFT_PLAN_T* make_fft_c2r(int size, const float complex *input, float* output, int benchmark) //always backward DFT
 {
 	FFT_PLAN_T* plan=(FFT_PLAN_T*)malloc(sizeof(FFT_PLAN_T));
 	plan->plan = fftwf_plan_dft_c2r_1d(size, (fftwf_complex*)input, output, (benchmark)?FFTW_MEASURE:FFTW_ESTIMATE);

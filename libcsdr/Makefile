@@ -1,7 +1,8 @@
 CC=gcc
 CFLAGS= -std=gnu99 -Wall -Ofast -funroll-all-loops
 CFLAGS+= -DUSE_FFTW -DLIBCSDR_GPL
-CFLAGS+= -Wno-return-type -Wno-unused-function -Wno-unused-result
+CFLAGS+= -Wno-return-type -Wno-unused-function
+# -Wno-unused-result
 
 PARAMS_CPU = -march=native
 ifeq ($(shell uname -m), armv7l)
@@ -9,17 +10,12 @@ ifeq ($(shell uname -m), armv7l)
 endif
 CFLAGS+= $(PARAMS_CPU)
 
-LDFLAGS=-lm -lfftw3f -s
-OBJS=csdr.o
-TARGET=csdr
+LDFLAGS=-lm -s
+OBJS=libcsdr_gpl.o fft_fftw.o fft_rpi.o fastddc.o libcsdr.o
+TARGET=libcsdr.a
 
-all:
-	make -C libcsdr
-	make csdr
-
-csdr: $(OBJS)
-	$(CC) $(OBJS) libcsdr/libcsdr.a $(LDFLAGS) -o $(TARGET)
+all: $(OBJS)
+	ar rcs $(TARGET) $(OBJS)
 
 clean:
-	make -C libcsdr clean
 	rm -rf $(OBJS) $(TARGET)

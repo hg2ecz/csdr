@@ -4,7 +4,7 @@
 //It would speed up filtering and spectrum display.
 //However, this feature is not implemented yet. I've just started to work on it.
 
-FFT_PLAN_T* make_fft_c(int size, complexf* input, complexf* output, int forward, int benchmark)
+FFT_PLAN_T* make_fft_c(int size, const float complex *input, float complex *output, int forward, int benchmark)
 {
 	int hmailbox = mbox_open();
 	int returned = gpu_fft_prepare(hmailbox, log2N, (forward)?GPU_FFT_FWD:GPU_FFT_REV, jobs, &fft);

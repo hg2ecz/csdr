@@ -5,6 +5,7 @@
 //http://www.fftw.org/doc/Precision.html
 
 #include <fftw3.h>
+#include <complex.h>
 #define FFT_LIBRARY_USED "fftw3"
 
 #define FFT_PLAN_T struct fft_plan_s
@@ -19,10 +20,8 @@ struct fft_plan_s
 	fftwf_plan plan;
 };
 
-#include "libcsdr.h"
-
-FFT_PLAN_T* make_fft_c2c(int size, complexf* input, complexf* output, int forward, int benchmark);
-FFT_PLAN_T* make_fft_r2c(int size, float* input, complexf* output, int benchmark);
+FFT_PLAN_T* make_fft_c2c(int size, const float complex *input, float complex *output, int forward, int benchmark);
+FFT_PLAN_T* make_fft_r2c(int size, float *input, float complex *output, int benchmark);
 void fft_execute(FFT_PLAN_T* plan);
 void fft_destroy(FFT_PLAN_T* plan);
 

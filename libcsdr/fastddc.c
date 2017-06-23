@@ -88,35 +88,31 @@ void fastddc_print(fastddc_t* ddc, char* source)
 		ddc->post_input_size, ddc->scrap );
 }
 
-void fft_swap_sides(complexf* io, int fft_size)
+void fft_swap_sides(float complex *io, int fft_size)
 {
 	int middle=fft_size/2;
-	complexf temp;
+	float complex temp;
 	for(int i=0;i<middle;i++)
 	{
-		iof(&temp,0)=iof(io,i);
-		qof(&temp,0)=qof(io,i);
-		iof(io,i)=iof(io,i+middle);
-		qof(io,i)=qof(io,i+middle);
-		iof(io,i+middle)=iof(&temp,0);
-		qof(io,i+middle)=qof(&temp,0);
+		temp=io[i];
+		io[i]=io[i+middle];
+		io[i+middle]=temp;
 	}
 }
 
-decimating_shift_addition_status_t fastddc_inv_cc(complexf* input, complexf* output, fastddc_t* ddc, FFT_PLAN_T* plan_inverse, complexf* taps_fft, decimating_shift_addition_status_t shift_stat)
+decimating_shift_addition_status_t fastddc_inv_cc(float complex* input, float complex *output, fastddc_t *ddc, FFT_PLAN_T *plan_inverse, const float complex *taps_fft, decimating_shift_addition_status_t shift_stat)
 {
 	//implements DDC by using the overlap & scrap method
 	//TODO: +/-1s on overlap_size et al
 	//input shoud have ddc->fft_size number of elements
 
-	complexf* inv_input = plan_inverse->input;
-	complexf* inv_output = plan_inverse->output;
+	float complex *inv_input = plan_inverse->input;
+	float complex *inv_output = plan_inverse->output;
 
 	//Initialize buffers for inverse FFT to zero
 	for(int i=0;i<plan_inverse->size;i++)
 	{
-		iof(inv_input,i)=0;
-		qof(inv_input,i)=0;
+		inv_input[i]=0;
 	}
 
 	//Alias & shift & filter at once
@@ -126,25 +122,13 @@ decimating_shift_addition_status_t fastddc_inv_cc(complexf* input, complexf* out
 	for(int i=0;i<ddc->fft_size;i++)
 	{
 		int output_index = (ddc->fft_size+i-ddc->offsetbin+(ddc->fft_inv_size/2))%plan_inverse->size;
-		int tap_index = i;
-		//fprintf(stderr, "output_index = %d , tap_index = %d, input index = %d\n", output_index, tap_index, i);
-		//cmultadd(inv_input+output_index, input+i, taps_fft+tap_index); //cmultadd(output, input1, input2):   complex output += complex input1 * complex input 2
-		// (a+b*i)*(c+d*i) = (ac-bd)+(ad+bc)*i
-		// a = iof(input,i)
-		// b = qof(input,i)
-		// c = iof(taps_fft,i)
-		// d = qof(taps_fft,i)
-		iof(inv_input,output_index) += iof(input,i) * iof(taps_fft,i) - qof(input,i) * qof(taps_fft,i);
-		qof(inv_input,output_index) += iof(input,i) * qof(taps_fft,i) + qof(input,i) * iof(taps_fft,i);
-		//iof(inv_input,output_index) += iof(input,i); //no filter
-		//qof(inv_input,output_index) += qof(input,i);		
+		inv_input[output_index] += input[i] * taps_fft[i];
 	}
 
 	//Normalize inv fft bins (now our output level is not higher than the input... but we may optimize this into the later loop when we normalize by size)
 	for(int i=0;i<plan_inverse->size;i++)
 	{
-		iof(inv_input,i)/=ddc->pre_decimation;
-		qof(inv_input,i)/=ddc->pre_decimation;
+		inv_input[i]/=ddc->pre_decimation;
 	}
 
 	fft_swap_sides(inv_input,plan_inverse->size);
@@ -153,8 +137,7 @@ decimating_shift_addition_status_t fastddc_inv_cc(complexf* input, complexf* out
 	//Normalize data
 	for(int i=0;i<plan_inverse->size;i++) //@fastddc_inv_cc: normalize by size
 	{
-		iof(inv_output,i)/=plan_inverse->size;
-		qof(inv_output,i)/=plan_inverse->size;
+		inv_output[i]/=plan_inverse->size;
 	}
 	
 	//Overlap is scrapped, not added

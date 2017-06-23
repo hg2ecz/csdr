@@ -36,7 +36,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <fcntl.h>
 #include <time.h>
 
-#include "libcsdr.h"
+#include "libcsdr/libcsdr.h"
 #include "libcsdr_gpl.h"
 
 #define T_BUFSIZE (1024*1024/4)
