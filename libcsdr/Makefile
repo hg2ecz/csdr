@@ -12,7 +12,7 @@ ifeq ($(shell uname -m), aarch64)
     SIMD_ASM= -DNEON_ARMv8_ASM
 endif
 
-CFLAGS+= $(SIMD_ASM)
+#CFLAGS+= $(SIMD_ASM)
 CFLAGS+= $(PARAMS_CPU)
 
 LDFLAGS=-lm -s
