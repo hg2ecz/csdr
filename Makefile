@@ -1,7 +1,7 @@
 CC=gcc
 CFLAGS= -std=gnu99 -Wall -Ofast -funroll-all-loops
 CFLAGS+= -DUSE_FFTW -DLIBCSDR_GPL
-CFLAGS+= -Wno-return-type -Wno-unused-function -Wno-unused-result
+CFLAGS+= -Wno-unused-result
 
 PARAMS_CPU = -march=native
 ifeq ($(shell uname -m), armv7l)

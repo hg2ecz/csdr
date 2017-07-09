@@ -368,7 +368,7 @@ FILE* init_get_random_samples_f();
 void get_random_samples_f(float* output, int output_size, FILE* status);
 void get_random_gaussian_samples_c(float complex *output, int output_size, FILE* status);
 int deinit_get_random_samples_f(FILE* status);
-float *add_ff(const float* input1, const float *input2, float* output, int input_size);
+void add_ff(const float* input1, const float *input2, float* output, int input_size);
 float total_logpower_cf(const float complex *input, int input_size);
 float normalized_timing_variance_u32_f(const unsigned* input, float* temp, int input_size, int samples_per_symbol, int initial_sample_offset, int debug_print);
 
@@ -380,14 +380,14 @@ typedef enum matched_filter_type_e
 
 #define MATCHED_FILTER_DEFAULT MATCHED_FILTER_RRC
 
-int firdes_cosine_f(float* taps, int taps_length, int samples_per_symbol);
-int firdes_rrc_f(float* taps, int taps_length, int samples_per_symbol, float beta);
+void firdes_cosine_f(float* taps, int taps_length, int samples_per_symbol);
+void firdes_rrc_f(float* taps, int taps_length, int samples_per_symbol, float beta);
 matched_filter_type_t matched_filter_get_type_from_string(const char *input);
 int apply_real_fir_cc(const float complex *input, float complex *output, int input_size, float* taps, int taps_length);
 void generic_slicer_f_u8(const float* input, unsigned char* output, int input_size, int n_symbols);
 void plain_interpolate_cc(const float complex *input, float complex *output, int input_size, int interpolation);;
 void normalize_fir_f(const float* input, float* output, int length);
-float* add_const_cc(const float complex *input, float complex *output, int input_size, float complex x);
+void add_const_cc(const float complex *input, float complex *output, int input_size, float complex x);
 void pack_bits_1to8_u8_u8(const unsigned char *input, unsigned char *output, int input_size);
 unsigned char pack_bits_8to1_u8_u8(const unsigned char *input);
 void dbpsk_decoder_c_u8(const float complex *input, unsigned char *output, int input_size);

@@ -303,8 +303,8 @@ shift_addfast_data_t shift_addfast_init(float rate)
     return output;
 }
 
-#ifdef NEON_OPTS
-#pragma message "Manual NEON optimizations are ON: we have a faster shift_addfast_cc now."
+#ifdef NEON_ARMv7_ASM
+#pragma message "Manual NEON ARMv7 ASM optimizations are ON: we have a faster shift_addfast_cc now."
 
 float shift_addfast_cc(const float complex *input, float complex *output, int input_size, shift_addfast_data_t* d, float starting_phase)
 {
@@ -446,8 +446,8 @@ float shift_addfast_cc(const float complex *input, float complex *output, int in
 
 #endif
 
-#ifdef NEON_OPTS
-#pragma message "Manual NEON optimizations are ON: we have a faster fir_decimate_cc now."
+#ifdef NEON_ARMv7_ASM
+#pragma message "Manual NEON ARMv7 ASM optimizations are ON: we have a faster fir_decimate_cc now."
 
 //max help: http://community.arm.com/groups/android-community/blog/2015/03/27/arm-neon-programming-quick-reference
 
@@ -2397,7 +2397,9 @@ FILE* init_get_random_samples_f()
 void get_random_samples_f(float* output, int output_size, FILE* status)
 {
     int* pioutput = (int*)output;
-    fread((unsigned char*)output, sizeof(float), output_size, status);
+    if (fread((unsigned char*)output, sizeof(float), output_size, status) != output_size) {
+	fprintf(stderr, "read error in get_random_samples_f\n");
+    }
     for(int i=0;i<output_size;i++)
     {
         float tempi = pioutput[i];
@@ -2408,7 +2410,9 @@ void get_random_samples_f(float* output, int output_size, FILE* status)
 void get_random_gaussian_samples_c(float complex *output, int output_size, FILE* status)
 {
     int* pioutput = (int*)output;
-    fread((unsigned char*)output, sizeof(float complex), output_size, status);
+    if (fread((unsigned char*)output, sizeof(float complex), output_size, status) != output_size) {
+	fprintf(stderr, "read error in get_random_gaussian_samples_c\n");
+    }
     for(int i=0;i<output_size;i++)
     {
         float u1 = 0.5+0.49999999*(((float)pioutput[2*i])/(float)INT_MAX);
@@ -2422,7 +2426,7 @@ int deinit_get_random_samples_f(FILE* status)
     return fclose(status);
 }
 
-int firdes_cosine_f(float* taps, int taps_length, int samples_per_symbol)
+void firdes_cosine_f(float* taps, int taps_length, int samples_per_symbol)
 {
     //needs a taps_length 2 × samples_per_symbol + 1
     int middle_i=taps_length/2;
@@ -2431,7 +2435,7 @@ int firdes_cosine_f(float* taps, int taps_length, int samples_per_symbol)
     normalize_fir_f(taps, taps, taps_length);
 }
 
-int firdes_rrc_f(float* taps, int taps_length, int samples_per_symbol, float beta)
+void firdes_rrc_f(float* taps, int taps_length, int samples_per_symbol, float beta)
 {
     //needs an odd taps_length
     int middle_i=taps_length/2;
@@ -2467,12 +2471,12 @@ matched_filter_type_t matched_filter_get_type_from_string(const char *input)
     return MATCHED_FILTER_DEFAULT;
 }
 
-float *add_ff(const float *input1, const float *input2, float *output, int input_size)
+void add_ff(const float *input1, const float *input2, float *output, int input_size)
 {
     for(int i=0;i<input_size;i++) output[i]=input1[i]+input2[i];
 }
 
-float* add_const_cc(const float complex *input, float complex *output, int input_size, float complex x)
+void add_const_cc(const float complex *input, float complex *output, int input_size, float complex x)
 {
     for(int i=0;i<input_size;i++)
     {

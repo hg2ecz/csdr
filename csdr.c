@@ -184,7 +184,7 @@ int bigbufs = 0;
 char **argv_global;
 int argc_global;
 
-int errhead()
+void errhead()
 {
     fprintf(stderr, "%s%s%s: ", argv_global[0], ((argc_global>=2)?" ":""), ((argc_global>=2)?argv_global[1]:""));
 }
@@ -216,8 +216,8 @@ int clone_(int bufsize_param)
         clone_buffer = (unsigned char*)malloc(bufsize_param*sizeof(unsigned char));
         for(;;)
         {
-            fread(clone_buffer, sizeof(unsigned char), bufsize_param, stdin);
-            fwrite(clone_buffer, sizeof(unsigned char), bufsize_param, stdout);
+            if (fread(clone_buffer, sizeof(unsigned char), bufsize_param, stdin) != bufsize_param) fprintf(stderr, "error on read in clone_ func\n");
+            if (fwrite(clone_buffer, sizeof(unsigned char), bufsize_param, stdout) != bufsize_param) fprintf(stderr, "error on write in clone_ func\n");
             TRY_YIELD;
         }
 }
@@ -314,7 +314,7 @@ int getbufsize()
 {
     if(!env_csdr_dynamic_bufsize_on) return (bigbufs) ? env_csdr_fixed_big_bufsize : env_csdr_fixed_bufsize;
     int recv_first[2];
-    fread(recv_first, sizeof(int), 2, stdin);
+    if (fread(recv_first, sizeof(int), 2, stdin) != 2) fprintf(stderr, "error in getbuffsize\n");
     if(memcmp(recv_first, SETBUF_PREAMBLE, sizeof(char)*4)!=0)
     { badsyntax("warning! Did not match preamble on the beginning of the stream. You should put \"csdr setbuf <buffer size>\" at the beginning of the chain! Falling back to default buffer size: " STRINGIFY_VALUE(SETBUF_DEFAULT_BUFSIZE)); return SETBUF_DEFAULT_BUFSIZE; }
     if(recv_first[1]<=0) { badsyntax("warning! Invalid buffer size." ); return 0; }
@@ -374,7 +374,7 @@ int sendbufsize(int size)
     return size;
 }
 
-int parse_env()
+void parse_env()
 {
     char* envtmp;
     envtmp=getenv("CSDR_DYNAMIC_BUFSIZE_ON");
@@ -520,7 +520,7 @@ int main(int argc, char *argv[])
         for(;;)
         {
             FEOF_CHECK;
-            fread(buffer_u8, sizeof(unsigned char), the_bufsize, stdin);
+            if (fread(buffer_u8, sizeof(unsigned char), the_bufsize, stdin) != the_bufsize) printf("error on read in buffer_u8\n");
             convert_u8_f(buffer_u8, output_buffer, the_bufsize);
             FWRITE_R;
             TRY_YIELD;
@@ -3583,7 +3583,9 @@ int main(int argc, char *argv[])
         char buffer[1000];
         snprintf(buffer, 1000-1, "xdg-open https://github.com/simonyiszk/csdr/blob/master/README.md#$(csdr ?%s | head -n1 | awk '{print $1;}')", argv[1]+2);
         fprintf(stderr, "csdr ??: %s\n", buffer);
-        system(buffer);
+        if (system(buffer)) {
+            fprintf(stderr, "error on xdg-open call\n");
+        }
         return 0;
     }
 
@@ -3592,7 +3594,9 @@ int main(int argc, char *argv[])
         char buffer[1000];
         snprintf(buffer, 1000-1, "csdr 2>&1 | grep -i %s", argv[1]+1);
         fprintf(stderr, "csdr ?: %s\n", buffer);
-        system(buffer);
+        if (system(buffer)) {
+            fprintf(stderr, "error on csdr call\n");
+        }
         return 0;
     }
 
@@ -3600,7 +3604,9 @@ int main(int argc, char *argv[])
     {
         char buffer[100];
         snprintf(buffer, 100-1, "python -c \"import os, sys\nfrom math import *\nprint %s\"", argv[1]+1);
-        system(buffer);
+        if (system(buffer)) {
+            fprintf(stderr, "error on python call\n");
+        }
         return 0;
     }
 
